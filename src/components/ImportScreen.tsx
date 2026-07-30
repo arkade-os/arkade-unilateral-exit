@@ -5,7 +5,7 @@ import {
     packageParamFromUrl,
     readFileText,
     type LoadedPackage,
-} from "@/lib/package";
+} from "@arkade-os/exit-ui";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 

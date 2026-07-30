@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ExitPackage } from "@arkade-os/sdk";
-import { clearSession, loadSession, saveSession, type SessionStore } from "./session";
+import { clearSession, loadSession, saveSession, type SessionStore } from "../src/session";
 
 const pkg: ExitPackage = {
     version: 1,

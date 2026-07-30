@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { phaseFor } from "./stepMeta";
+import { phaseFor } from "../src/steps";
 
 describe("phaseFor", () => {
     it("maps confirmed and terminal statuses directly", () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { decodePackageBlob, encodeExitBundle, packageParamFromUrl } from "./package";
+import { decodePackageBlob, encodeExitBundle, packageParamFromUrl } from "../src/package";
 import type { ExitPackage } from "@arkade-os/sdk";
 
 const pkg: ExitPackage = {

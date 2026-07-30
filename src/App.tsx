@@ -5,8 +5,7 @@ import { ImportScreen } from "@/components/ImportScreen";
 import { ReviewScreen } from "@/components/ReviewScreen";
 import { RunScreen } from "@/components/RunScreen";
 import { Button } from "@/components/ui/button";
-import { packageParamFromUrl } from "@/lib/package";
-import { clearSession, loadSession, saveSession } from "@/lib/session";
+import { clearSession, loadSession, packageParamFromUrl, saveSession } from "@arkade-os/exit-ui";
 import { cn } from "@/lib/utils";
 
 type Screen = "import" | "review" | "run";

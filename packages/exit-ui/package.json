@@ -1,0 +1,35 @@
+{
+    "name": "@arkade-os/exit-ui",
+    "version": "0.1.0",
+    "private": true,
+    "type": "module",
+    "description": "Framework-free logic for driving an Arkade unilateral exit package.",
+    "license": "MIT",
+    "main": "./dist/index.js",
+    "module": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "import": "./dist/index.js"
+        }
+    },
+    "files": [
+        "dist"
+    ],
+    "scripts": {
+        "build": "tsup",
+        "typecheck": "tsc --noEmit",
+        "test": "vitest run",
+        "lint": "prettier --check src test"
+    },
+    "peerDependencies": {
+        "@arkade-os/sdk": ">=0.4.45"
+    },
+    "devDependencies": {
+        "@arkade-os/sdk": "0.4.45",
+        "tsup": "^8.5.0",
+        "typescript": "^5.9.0",
+        "vitest": "^3.0.0"
+    }
+}

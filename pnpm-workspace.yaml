@@ -1,0 +1,7 @@
+packages:
+    - "packages/*"
+
+# esbuild's postinstall must be allowed or vite/vitest silently fall back to a
+# missing binary on some platforms.
+onlyBuiltDependencies:
+    - esbuild

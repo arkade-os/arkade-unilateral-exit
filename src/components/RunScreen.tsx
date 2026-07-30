@@ -6,8 +6,15 @@ import {
 } from "@arkade-os/sdk";
 import { CheckCircle2, CircleAlert, Loader2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { loadOrCreateFeeKey, makeFeeWallet, type FeeWalletHandle } from "@/lib/feeWallet";
-import { KIND_LABEL, PHASE_STYLE, phaseFor, type StepPhase } from "@/components/stepMeta";
+import {
+    KIND_LABEL,
+    loadOrCreateFeeKey,
+    makeFeeWallet,
+    phaseFor,
+    type FeeWalletHandle,
+    type StepPhase,
+} from "@arkade-os/exit-ui";
+import { PHASE_STYLE } from "@/components/stepMeta";
 import { CopyableHash } from "@/components/CopyableHash";
 import { FundingGate } from "@/components/FundingGate";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";

@@ -1,9 +1,7 @@
 import type { ExitPackage } from "@arkade-os/sdk";
 import { Check, CircleAlert, Copy, Download, RefreshCw, Wallet } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import type { FeeWalletHandle } from "@/lib/feeWallet";
-import { resetFeeKey } from "@/lib/feeWallet";
-import { encodeExitBundle } from "@/lib/package";
+import { encodeExitBundle, resetFeeKey, type FeeWalletHandle } from "@arkade-os/exit-ui";
 import { formatSats } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { CopyableHash } from "@/components/CopyableHash";

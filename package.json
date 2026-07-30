@@ -6,15 +6,16 @@
     "description": "Keyless web executor for Arkade unilateral exit packages.",
     "license": "MIT",
     "scripts": {
-        "dev": "vite",
-        "build": "tsc -b && vite build",
+        "dev": "pnpm --filter @arkade-os/exit-ui build && vite",
+        "build": "pnpm --filter @arkade-os/exit-ui build && tsc -b && vite build",
         "preview": "vite preview",
-        "typecheck": "tsc -b --noEmit",
-        "test": "vitest run",
+        "typecheck": "pnpm --filter @arkade-os/exit-ui build && tsc -b --noEmit",
+        "test": "pnpm -r test",
         "lint": "prettier --check .",
         "format": "prettier --write ."
     },
     "dependencies": {
+        "@arkade-os/exit-ui": "workspace:*",
         "@arkade-os/sdk": "0.4.45",
         "@radix-ui/react-progress": "^1.1.2",
         "@radix-ui/react-slot": "^1.1.2",

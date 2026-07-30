@@ -51,6 +51,29 @@ remainder.
   Review → Advanced settings, or bake in your own with `VITE_ESPLORA_URL` at build time. Whichever
   you pick sees your transactions (as it must, to broadcast them) and your IP.
 
+## Repository layout
+
+A pnpm workspace. The app lives at the root; shared logic lives in a package beside it.
+
+```
+package.json          the app (private) — Vite + React, deploys to Pages
+src/                  app code: screens, shell, presentation
+packages/exit-ui/     @arkade-os/exit-ui — framework-free exit logic
+```
+
+`@arkade-os/exit-ui` holds everything that isn't presentation: package decoding and the
+self-executable bundle envelope, session persistence, ephemeral fee-wallet construction, Esplora
+endpoint resolution, and the executor step-phase mapping. It has no React and no Tailwind, and takes
+`@arkade-os/sdk` as a peer dependency so a consumer never ends up with two copies of the SDK.
+
+The app consumes it as `"@arkade-os/exit-ui": "workspace:*"`, so there is nothing to publish or
+install — but the package must be **built before** the app typechecks or builds, because the app
+imports its compiled output. The root `dev`, `build` and `typecheck` scripts do that for you; don't
+run `tsc` or `vite` directly without building the package first.
+
+It exists so this app and the copy embedded in
+[arkade-explorer](https://github.com/ArkLabsHQ/arkade-explorer) stop drifting apart.
+
 ## Build
 
 **Prerequisites:** Node 24 and [corepack](https://nodejs.org/api/corepack.html). pnpm is pinned by
@@ -62,15 +85,15 @@ corepack enable
 pnpm install
 ```
 
-| Script           | What it does                                                                   |
-| ---------------- | ------------------------------------------------------------------------------ |
-| `pnpm dev`       | Dev server with HMR.                                                           |
-| `pnpm typecheck` | `tsc -b --noEmit`. Strict, with `noUnusedLocals`/`noUnusedParameters`.         |
-| `pnpm test`      | Vitest unit tests — package decoding, bundle round-trip, executor step phases. |
-| `pnpm lint`      | `prettier --check .`                                                           |
-| `pnpm format`    | `prettier --write .`                                                           |
-| `pnpm build`     | Typecheck, then a production build into `dist/`.                               |
-| `pnpm preview`   | Serve the built `dist/` locally at the same base path Pages uses.              |
+| Script           | What it does                                                              |
+| ---------------- | ------------------------------------------------------------------------- |
+| `pnpm dev`       | Dev server with HMR.                                                      |
+| `pnpm typecheck` | `tsc -b --noEmit`. Strict, with `noUnusedLocals`/`noUnusedParameters`.    |
+| `pnpm test`      | Vitest unit tests across the workspace (they live in `packages/exit-ui`). |
+| `pnpm lint`      | `prettier --check .`                                                      |
+| `pnpm format`    | `prettier --write .`                                                      |
+| `pnpm build`     | Typecheck, then a production build into `dist/`.                          |
+| `pnpm preview`   | Serve the built `dist/` locally at the same base path Pages uses.         |
 
 CI runs lint, typecheck, test and build on every pull request
 (`.github/workflows/ci.yml`).

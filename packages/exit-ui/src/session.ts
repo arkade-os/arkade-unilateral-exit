@@ -1,5 +1,5 @@
 import type { ExitPackage } from "@arkade-os/sdk";
-import { parsePackageJson } from "@/lib/package";
+import { parsePackageJson } from "./package";
 
 const STORAGE_KEY = "arkade-exit:session";
 const FEE_KEY_RE = /^[0-9a-f]{64}$/;
