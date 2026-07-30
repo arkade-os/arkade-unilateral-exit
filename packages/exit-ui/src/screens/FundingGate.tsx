@@ -12,8 +12,8 @@ import {
     encodeExitBundle,
     resetFeeKey,
     type FeeWalletHandle,
-} from "@arkade-os/exit-ui";
-import { formatSats } from "@/lib/utils";
+} from "../index";
+import { formatSats } from "../format";
 
 function downloadText(filename: string, text: string) {
     const url = URL.createObjectURL(new Blob([text], { type: "application/json" }));
@@ -87,19 +87,23 @@ export function FundingGate({
     return (
         <Card>
             <CardHeader className="flex-row items-center gap-2">
-                <Wallet className="size-4 text-signal" />
+                <Wallet className="size-4 text-exit-signal" />
                 <CardTitle>Fund the exit</CardTitle>
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
-                <p className="text-sm text-ink-dim">
+                <p className="text-sm text-exit-ink-dim">
                     Send at least{" "}
-                    <span className="tabular font-medium text-ink">{formatSats(required)}</span> to
-                    this throwaway fee address. It only ever holds fee sats — never your exited
+                    <span className="font-mono tabular-nums tracking-[-0.01em] font-medium text-exit-ink">
+                        {formatSats(required)}
+                    </span>{" "}
+                    to this throwaway fee address. It only ever holds fee sats — never your exited
                     funds — and lives in this browser. Change comes back to it.
                 </p>
 
-                <div className="flex items-center justify-between gap-3 rounded-[var(--radius)] border border-line bg-panel-2/60 p-3">
-                    <span className="tabular break-all text-xs text-ink">{fee.address}</span>
+                <div className="flex items-center justify-between gap-3 rounded-[var(--radius-exit)] border border-exit-line bg-exit-panel-2/60 p-3">
+                    <span className="font-mono tabular-nums tracking-[-0.01em] break-all text-xs text-exit-ink">
+                        {fee.address}
+                    </span>
                     <button
                         type="button"
                         onClick={async () => {
@@ -107,11 +111,11 @@ export function FundingGate({
                             setCopied(true);
                             setTimeout(() => setCopied(false), 1200);
                         }}
-                        className="shrink-0 text-ink-dim hover:text-ink"
+                        className="shrink-0 text-exit-ink-dim hover:text-exit-ink"
                         title="Copy address"
                     >
                         {copied ? (
-                            <Check className="size-4 text-ok" />
+                            <Check className="size-4 text-exit-ok" />
                         ) : (
                             <Copy className="size-4" />
                         )}
@@ -120,16 +124,19 @@ export function FundingGate({
 
                 <div className="flex flex-col gap-1.5">
                     <div className="flex justify-between text-xs">
-                        <span className="text-ink-dim">Received (confirmed)</span>
-                        <span className="tabular text-ink">
+                        <span className="text-exit-ink-dim">Received (confirmed)</span>
+                        <span className="font-mono tabular-nums tracking-[-0.01em] text-exit-ink">
                             {formatSats(balance)} / {formatSats(required)}
                         </span>
                     </div>
-                    <Progress value={pct} indicatorClassName={funded ? "bg-ok" : "bg-signal"} />
+                    <Progress
+                        value={pct}
+                        indicatorClassName={funded ? "bg-exit-ok" : "bg-exit-signal"}
+                    />
                 </div>
 
                 {unreachable && (
-                    <div className="flex items-start gap-2 rounded-[var(--radius)] border border-wait/40 bg-wait/10 p-3 text-xs text-wait">
+                    <div className="flex items-start gap-2 rounded-[var(--radius-exit)] border border-exit-wait/40 bg-exit-wait/10 p-3 text-xs text-exit-wait">
                         <CircleAlert className="mt-0.5 size-4 shrink-0" />
                         <span>
                             Can’t reach the Esplora endpoint to check the balance — still retrying.
@@ -168,7 +175,7 @@ export function FundingGate({
                     </Button>
                 </div>
 
-                <p className="text-[11px] text-ink-faint">
+                <p className="text-[11px] text-exit-ink-faint">
                     Export produces a self-executable bundle with the fee key embedded — the
                     graph-mode equivalent of a fully-signed package. Keep it private: anyone holding
                     it can spend the small fee remainder.

@@ -11,8 +11,8 @@ import {
     cn,
     esploraUrlFor,
     truncateMiddle,
-} from "@arkade-os/exit-ui";
-import { btc, formatSats } from "@/lib/utils";
+} from "../index";
+import { btc, formatSats } from "../format";
 
 // ---------------------------------------------------------------------------
 // Derivations
@@ -62,9 +62,11 @@ function delayLabel(d: ExitDelay): string {
 function Stat({ label, value, hint }: { label: string; value: ReactNode; hint?: ReactNode }) {
     return (
         <div className="flex flex-col gap-0.5">
-            <span className="text-[11px] uppercase tracking-wide text-ink-faint">{label}</span>
-            <span className="tabular text-lg text-ink">{value}</span>
-            {hint && <span className="text-[11px] text-ink-dim">{hint}</span>}
+            <span className="text-[11px] uppercase tracking-wide text-exit-ink-faint">{label}</span>
+            <span className="font-mono tabular-nums tracking-[-0.01em] text-lg text-exit-ink">
+                {value}
+            </span>
+            {hint && <span className="text-[11px] text-exit-ink-dim">{hint}</span>}
         </div>
     );
 }
@@ -72,15 +74,16 @@ function Stat({ label, value, hint }: { label: string; value: ReactNode; hint?: 
 export function ReviewScreen({
     pkg,
     onContinue,
+    esploraOverride,
 }: {
     pkg: ExitPackage;
     onContinue: (esploraUrl: string) => void;
+    /** Endpoint that wins over the SDK default. Passed in rather than read from
+     * `import.meta.env` here: that is Vite's, and this package must not assume a
+     * bundler. The host supplies its own build-time value. */
+    esploraOverride?: string;
 }) {
-    // The build-time override is Vite's, so it is supplied here rather than read
-    // inside the package — which must stay bundler-agnostic.
-    const [esplora, setEsplora] = useState(() =>
-        esploraUrlFor(pkg.network, import.meta.env.VITE_ESPLORA_URL),
-    );
+    const [esplora, setEsplora] = useState(() => esploraUrlFor(pkg.network, esploraOverride));
     const [showAdvanced, setShowAdvanced] = useState(false);
     const active = pkg.vtxos.filter((v) => !v.skipped);
     const skipped = pkg.vtxos.filter((v) => v.skipped);
@@ -100,13 +103,15 @@ export function ReviewScreen({
                 <CardHeader className="flex-row items-center justify-between">
                     <CardTitle>Exit summary</CardTitle>
                     <div className="flex items-center gap-2">
-                        <span className="rounded-full border border-line px-2 py-0.5 text-[11px] uppercase tracking-wide text-ink-dim">
+                        <span className="rounded-full border border-exit-line px-2 py-0.5 text-[11px] uppercase tracking-wide text-exit-ink-dim">
                             {pkg.network}
                         </span>
                         <span
                             className={cn(
                                 "rounded-full px-2 py-0.5 text-[11px] font-medium uppercase tracking-wide",
-                                graph ? "bg-flight/15 text-flight" : "bg-signal/15 text-signal",
+                                graph
+                                    ? "bg-exit-flight/15 text-exit-flight"
+                                    : "bg-exit-signal/15 text-exit-signal",
                             )}
                         >
                             {graph ? "graph · you fund" : "funded · keyless"}
@@ -140,7 +145,7 @@ export function ReviewScreen({
                         value={formatDuration(estimate)}
                         hint={
                             <Tooltip content="Approximate: confirmation of each unroll tx (~10-min blocks) plus the longest CSV timelock a VTXO must wait out before its sweep.">
-                                <span className="inline-flex items-center gap-1 border-b border-dotted border-ink-faint">
+                                <span className="inline-flex items-center gap-1 border-b border-dotted border-exit-ink-faint">
                                     how? <Info className="size-3" />
                                 </span>
                             </Tooltip>
@@ -155,9 +160,10 @@ export function ReviewScreen({
                     icon={<Clock className="size-4" />}
                     title="Validity window passed"
                 >
-                    This package’s <span className="tabular">validUntil</span> has elapsed. The
-                    operator may already have swept some branches. Execution will still try — it is
-                    harmless — but some steps may conflict.
+                    This package’s{" "}
+                    <span className="font-mono tabular-nums tracking-[-0.01em]">validUntil</span>{" "}
+                    has elapsed. The operator may already have swept some branches. Execution will
+                    still try — it is harmless — but some steps may conflict.
                 </Warning>
             )}
 
@@ -178,13 +184,16 @@ export function ReviewScreen({
                     <CardTitle>Destination</CardTitle>
                 </CardHeader>
                 <CardContent className="flex items-center justify-between gap-3 text-sm">
-                    <span className="flex items-center gap-1.5 text-ink-dim">
+                    <span className="flex items-center gap-1.5 text-exit-ink-dim">
                         Sweep address
                         <Tooltip content="Fixed at package creation. The sweep transactions are pre-signed to this address, so it can't be changed here.">
                             <Lock className="size-3.5" />
                         </Tooltip>
                     </span>
-                    <span className="tabular text-xs text-ink" title={pkg.sweepAddress}>
+                    <span
+                        className="font-mono tabular-nums tracking-[-0.01em] text-xs text-exit-ink"
+                        title={pkg.sweepAddress}
+                    >
                         {truncateMiddle(pkg.sweepAddress, 12, 10)}
                     </span>
                 </CardContent>
@@ -193,39 +202,41 @@ export function ReviewScreen({
             <Card>
                 <CardHeader className="flex-row items-center justify-between">
                     <CardTitle>VTXOs being exited</CardTitle>
-                    <span className="text-xs text-ink-dim">
+                    <span className="text-xs text-exit-ink-dim">
                         {active.length} ·{" "}
-                        <span className="tabular">{formatSats(exitingValue)}</span>
+                        <span className="font-mono tabular-nums tracking-[-0.01em]">
+                            {formatSats(exitingValue)}
+                        </span>
                     </span>
                 </CardHeader>
                 <CardContent>
-                    <div className="divide-y divide-line rounded-[var(--radius)] border border-line">
+                    <div className="divide-y divide-exit-line rounded-[var(--radius-exit)] border border-exit-line">
                         {active.map((v) => (
                             <div
                                 key={v.outpoint}
                                 className="flex items-center justify-between gap-3 p-3"
                             >
                                 <Tooltip content={`VTXO outpoint (txid:vout): ${v.outpoint}`}>
-                                    <span className="tabular text-xs text-ink-dim">
+                                    <span className="font-mono tabular-nums tracking-[-0.01em] text-xs text-exit-ink-dim">
                                         {truncateMiddle(v.outpoint, 10, 8)}
                                     </span>
                                 </Tooltip>
                                 <div className="flex items-center gap-2 text-xs">
                                     {v.path && (
                                         <Tooltip content="The tapscript path this VTXO is spent through onchain.">
-                                            <span className="rounded bg-panel-2 px-1.5 py-0.5 text-ink-dim">
+                                            <span className="rounded bg-exit-panel-2 px-1.5 py-0.5 text-exit-ink-dim">
                                                 {pathLabel(v.path)}
                                             </span>
                                         </Tooltip>
                                     )}
                                     {v.delay && (
                                         <Tooltip content="The sweep becomes spendable only after this relative timelock elapses from its exit tx confirming.">
-                                            <span className="rounded bg-panel-2 px-1.5 py-0.5 text-ink-dim">
+                                            <span className="rounded bg-exit-panel-2 px-1.5 py-0.5 text-exit-ink-dim">
                                                 {delayLabel(v.delay)}
                                             </span>
                                         </Tooltip>
                                     )}
-                                    <span className="tabular text-ink">
+                                    <span className="font-mono tabular-nums tracking-[-0.01em] text-exit-ink">
                                         {formatSats(v.value ?? 0)}
                                     </span>
                                 </div>
@@ -236,10 +247,15 @@ export function ReviewScreen({
                                 key={v.outpoint}
                                 className="flex items-center justify-between gap-3 p-3 opacity-60"
                             >
-                                <span className="tabular text-xs text-ink-faint" title={v.outpoint}>
+                                <span
+                                    className="font-mono tabular-nums tracking-[-0.01em] text-xs text-exit-ink-faint"
+                                    title={v.outpoint}
+                                >
                                     {truncateMiddle(v.outpoint, 10, 8)}
                                 </span>
-                                <span className="text-xs text-dead/80">skipped · {v.skipped}</span>
+                                <span className="text-xs text-exit-dead/80">
+                                    skipped · {v.skipped}
+                                </span>
                             </div>
                         ))}
                     </div>
@@ -249,7 +265,7 @@ export function ReviewScreen({
             <div className="flex flex-col gap-2">
                 <button
                     onClick={() => setShowAdvanced((s) => !s)}
-                    className="inline-flex w-fit items-center gap-1 text-xs text-ink-dim transition-colors hover:text-ink"
+                    className="inline-flex w-fit items-center gap-1 text-xs text-exit-ink-dim transition-colors hover:text-exit-ink"
                 >
                     <ChevronDown
                         className={cn(
@@ -269,13 +285,19 @@ export function ReviewScreen({
                                 value={esplora}
                                 onChange={(e) => setEsplora(e.target.value)}
                                 spellCheck={false}
-                                className="w-full rounded-[var(--radius)] border border-line bg-panel/60 p-2.5 font-mono text-xs text-ink focus:border-ink-faint focus:outline-none"
+                                className="w-full rounded-[var(--radius-exit)] border border-exit-line bg-exit-panel/60 p-2.5 font-mono text-xs text-exit-ink focus:border-exit-ink-faint focus:outline-none"
                             />
-                            <p className="text-[11px] text-ink-dim">
+                            <p className="text-[11px] text-exit-ink-dim">
                                 Defaults to the SDK endpoint for{" "}
-                                <span className="tabular">{pkg.network}</span>. Override only if you
-                                run your own — must be CORS-permissive and expose{" "}
-                                <span className="tabular">/txs/package</span>.
+                                <span className="font-mono tabular-nums tracking-[-0.01em]">
+                                    {pkg.network}
+                                </span>
+                                . Override only if you run your own — must be CORS-permissive and
+                                expose{" "}
+                                <span className="font-mono tabular-nums tracking-[-0.01em]">
+                                    /txs/package
+                                </span>
+                                .
                             </p>
                         </CardContent>
                     </Card>
@@ -309,10 +331,10 @@ function Warning({
     return (
         <div
             className={cn(
-                "flex items-start gap-2.5 rounded-[var(--radius)] border p-3 text-sm",
+                "flex items-start gap-2.5 rounded-[var(--radius-exit)] border p-3 text-sm",
                 tone === "danger"
-                    ? "border-dead/40 bg-dead/10 text-dead"
-                    : "border-wait/40 bg-wait/10 text-wait",
+                    ? "border-exit-dead/40 bg-exit-dead/10 text-exit-dead"
+                    : "border-exit-wait/40 bg-exit-wait/10 text-exit-wait",
             )}
         >
             <span className="mt-0.5 shrink-0">{icon ?? <AlertTriangle className="size-4" />}</span>

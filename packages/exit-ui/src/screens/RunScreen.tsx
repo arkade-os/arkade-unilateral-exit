@@ -21,8 +21,8 @@ import {
     phaseFor,
     type FeeWalletHandle,
     type StepPhase,
-} from "@arkade-os/exit-ui";
-import { FundingGate } from "@/components/FundingGate";
+} from "../index";
+import { FundingGate } from "./FundingGate";
 
 type RunPhase = "funding" | "running";
 
@@ -73,7 +73,7 @@ export function RunScreen({
     }, [graph, pkg.network, esploraUrl, embeddedFeeKeyHex, feeKeyNonce]);
 
     const feeErrorBanner = feeError ? (
-        <div className="rounded-[var(--radius)] border border-dead/40 bg-dead/10 p-3 text-sm text-dead">
+        <div className="rounded-[var(--radius-exit)] border border-exit-dead/40 bg-exit-dead/10 p-3 text-sm text-exit-dead">
             Couldn’t prepare the fee wallet: {feeError}
         </div>
     ) : null;
@@ -210,18 +210,20 @@ function ExecutionTimeline({
                     <StatusPill done={done} failed={failed} fatal={!!fatal} />
                 </CardHeader>
                 <CardContent className="flex flex-col gap-2">
-                    <div className="flex justify-between text-xs text-ink-dim">
+                    <div className="flex justify-between text-xs text-exit-ink-dim">
                         <span>
                             {confirmed} / {pkg.steps.length} transactions onchain
                         </span>
-                        {failed > 0 && <span className="text-dead">{failed} failed</span>}
+                        {failed > 0 && <span className="text-exit-dead">{failed} failed</span>}
                     </div>
                     <Progress
                         value={pct}
-                        indicatorClassName={failed ? "bg-dead" : done ? "bg-ok" : "bg-signal"}
+                        indicatorClassName={
+                            failed ? "bg-exit-dead" : done ? "bg-exit-ok" : "bg-exit-signal"
+                        }
                     />
                     {!done && (
-                        <p className="text-[11px] text-ink-faint">
+                        <p className="text-[11px] text-exit-ink-faint">
                             Safe to close and reopen — execution reads only the blockchain, so it
                             resumes where it left off.
                         </p>
@@ -232,7 +234,7 @@ function ExecutionTimeline({
             {warnings.map((w, i) => (
                 <div
                     key={i}
-                    className="flex items-start gap-2 rounded-[var(--radius)] border border-wait/40 bg-wait/10 p-3 text-xs text-wait"
+                    className="flex items-start gap-2 rounded-[var(--radius-exit)] border border-exit-wait/40 bg-exit-wait/10 p-3 text-xs text-exit-wait"
                 >
                     <CircleAlert className="mt-0.5 size-4 shrink-0" />
                     <span>{w}</span>
@@ -240,7 +242,7 @@ function ExecutionTimeline({
             ))}
 
             {fatal && (
-                <div className="rounded-[var(--radius)] border border-dead/40 bg-dead/10 p-3 text-sm text-dead">
+                <div className="rounded-[var(--radius-exit)] border border-exit-dead/40 bg-exit-dead/10 p-3 text-sm text-exit-dead">
                     Executor stopped: {fatal}
                 </div>
             )}
@@ -291,25 +293,28 @@ function TimelineRow({
             <div className="flex flex-col items-center">
                 <span
                     className={cn(
-                        "mt-1 flex size-3.5 items-center justify-center rounded-full border-2 bg-field",
+                        "mt-1 flex size-3.5 items-center justify-center rounded-full border-2 bg-exit-field",
                         s.ring,
                     )}
                 >
                     <span className={cn("size-1.5 rounded-full", s.dot)} />
                 </span>
-                {!last && <span className="w-px flex-1 bg-line" />}
+                {!last && <span className="w-px flex-1 bg-exit-line" />}
             </div>
             <div className="flex flex-1 items-start justify-between gap-3 pb-6">
                 <div className="flex flex-col gap-0.5">
-                    <span className="text-sm text-ink">
-                        <span className="text-ink-faint tabular">{index + 1}.</span> {kindLabel}
+                    <span className="text-sm text-exit-ink">
+                        <span className="text-exit-ink-faint font-mono tabular-nums tracking-[-0.01em]">
+                            {index + 1}.
+                        </span>{" "}
+                        {kindLabel}
                     </span>
                     <CopyableHash value={txid} />
                     {event?.reason && (phase === "failed" || phase === "skipped") && (
                         <span
                             className={cn(
                                 "text-xs",
-                                phase === "failed" ? "text-dead/80" : "text-ink-faint",
+                                phase === "failed" ? "text-exit-dead/80" : "text-exit-ink-faint",
                             )}
                         >
                             {event.reason}
@@ -319,7 +324,7 @@ function TimelineRow({
                 <div className="flex flex-col items-end gap-0.5">
                     <span className={cn("text-xs font-medium", s.text)}>{s.label}</span>
                     {blocksLeft !== null && (
-                        <span className="tabular text-[11px] text-wait">
+                        <span className="font-mono tabular-nums tracking-[-0.01em] text-[11px] text-exit-wait">
                             ~{blocksLeft} block{blocksLeft === 1 ? "" : "s"} left
                         </span>
                     )}
@@ -332,24 +337,24 @@ function TimelineRow({
 function StatusPill({ done, failed, fatal }: { done: boolean; failed: number; fatal: boolean }) {
     if (fatal)
         return (
-            <span className="flex items-center gap-1.5 text-xs text-dead">
+            <span className="flex items-center gap-1.5 text-xs text-exit-dead">
                 <CircleAlert className="size-3.5" /> stopped
             </span>
         );
     if (!done)
         return (
-            <span className="flex items-center gap-1.5 text-xs text-flight">
+            <span className="flex items-center gap-1.5 text-xs text-exit-flight">
                 <Loader2 className="size-3.5 animate-spin" /> running
             </span>
         );
     if (failed)
         return (
-            <span className="flex items-center gap-1.5 text-xs text-dead">
+            <span className="flex items-center gap-1.5 text-xs text-exit-dead">
                 <CircleAlert className="size-3.5" /> partial
             </span>
         );
     return (
-        <span className="flex items-center gap-1.5 text-xs text-ok">
+        <span className="flex items-center gap-1.5 text-xs text-exit-ok">
             <CheckCircle2 className="size-3.5" /> done
         </span>
     );
@@ -357,7 +362,7 @@ function StatusPill({ done, failed, fatal }: { done: boolean; failed: number; fa
 
 function Centered({ children }: { children: React.ReactNode }) {
     return (
-        <div className="flex items-center justify-center gap-2 py-16 text-sm text-ink-dim">
+        <div className="flex items-center justify-center gap-2 py-16 text-sm text-exit-ink-dim">
             <Loader2 className="size-4 animate-spin" /> {children}
         </div>
     );
