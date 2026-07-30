@@ -5,6 +5,8 @@ import { ImportScreen } from "@/components/ImportScreen";
 import { ReviewScreen } from "@/components/ReviewScreen";
 import { RunScreen } from "@/components/RunScreen";
 import { Button } from "@/components/ui/button";
+import { packageParamFromUrl } from "@/lib/package";
+import { clearSession, loadSession, saveSession } from "@/lib/session";
 import { cn } from "@/lib/utils";
 
 type Screen = "import" | "review" | "run";
@@ -43,19 +45,38 @@ class ScreenErrorBoundary extends Component<{ children: ReactNode }, { error: Er
     }
 }
 
+/**
+ * A package in the URL always wins over a stored one, so share links stay
+ * predictable. Used as a lazy `useState` initialiser so it runs once.
+ */
+function restoreSession() {
+    if (packageParamFromUrl(new URL(window.location.href))) return null;
+    const s = loadSession();
+    if (!s) return null;
+    // A run screen without an endpoint cannot execute; fall back to review.
+    if (s.screen === "run" && !s.esploraUrl) return { ...s, screen: "review" as const };
+    return s;
+}
+
 export function App() {
-    const [screen, setScreen] = useState<Screen>("import");
-    const [pkg, setPkg] = useState<ExitPackage | null>(null);
-    const [feeKeyHex, setFeeKeyHex] = useState<string | null>(null);
-    const [esplora, setEsplora] = useState<string>("");
+    const [restored] = useState(restoreSession);
+    const [screen, setScreen] = useState<Screen>(restored?.screen ?? "import");
+    const [pkg, setPkg] = useState<ExitPackage | null>(restored?.pkg ?? null);
+    const [feeKeyHex, setFeeKeyHex] = useState<string | null>(restored?.feeKeyHex ?? null);
+    const [esplora, setEsplora] = useState<string>(restored?.esploraUrl ?? "");
     const [confirmingReset, setConfirmingReset] = useState(false);
+    const [resumed, setResumed] = useState(!!restored);
+    const [saveFailed, setSaveFailed] = useState(false);
 
     const reset = () => {
+        clearSession();
         setPkg(null);
         setFeeKeyHex(null);
         setEsplora("");
         setScreen("import");
         setConfirmingReset(false);
+        setResumed(false);
+        setSaveFailed(false);
     };
 
     // Once execution has started, guard "Start over": it doesn't stop broadcasts
@@ -146,6 +167,25 @@ export function App() {
             </nav>
 
             <main className="flex-1">
+                {resumed && (
+                    <div className="mb-4 flex items-center justify-between gap-3 rounded-[var(--radius)] border border-line bg-panel-2/60 px-3 py-2 text-xs text-ink-dim">
+                        <span>Resumed a saved exit from this browser.</span>
+                        <div className="flex items-center gap-1">
+                            <Button size="sm" variant="ghost" onClick={reset}>
+                                Discard
+                            </Button>
+                            <Button size="sm" variant="ghost" onClick={() => setResumed(false)}>
+                                Dismiss
+                            </Button>
+                        </div>
+                    </div>
+                )}
+                {saveFailed && (
+                    <div className="mb-4 rounded-[var(--radius)] border border-wait/40 bg-wait/10 px-3 py-2 text-xs text-wait">
+                        This exit is too large to save on this device — keep your package file, you
+                        will need it to resume.
+                    </div>
+                )}
                 <ScreenErrorBoundary key={screen}>
                     {screen === "import" && (
                         <ImportScreen
@@ -153,6 +193,13 @@ export function App() {
                                 setPkg(loaded.pkg);
                                 setFeeKeyHex(loaded.feeKeyHex ?? null);
                                 setScreen("review");
+                                setSaveFailed(
+                                    !saveSession({
+                                        pkg: loaded.pkg,
+                                        feeKeyHex: loaded.feeKeyHex,
+                                        screen: "review",
+                                    }),
+                                );
                             }}
                         />
                     )}
@@ -162,11 +209,24 @@ export function App() {
                             onContinue={(url) => {
                                 setEsplora(url);
                                 setScreen("run");
+                                setSaveFailed(
+                                    !saveSession({
+                                        pkg,
+                                        esploraUrl: url,
+                                        feeKeyHex: feeKeyHex ?? undefined,
+                                        screen: "run",
+                                    }),
+                                );
                             }}
                         />
                     )}
                     {screen === "run" && pkg && esplora && (
-                        <RunScreen pkg={pkg} esploraUrl={esplora} embeddedFeeKeyHex={feeKeyHex} />
+                        <RunScreen
+                            pkg={pkg}
+                            esploraUrl={esplora}
+                            embeddedFeeKeyHex={feeKeyHex}
+                            onComplete={clearSession}
+                        />
                     )}
                 </ScreenErrorBoundary>
             </main>
