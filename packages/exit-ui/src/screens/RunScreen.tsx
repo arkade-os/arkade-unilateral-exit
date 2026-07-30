@@ -30,6 +30,7 @@ export function RunScreen({
     pkg,
     esploraUrl,
     embeddedFeeKeyHex,
+    sessionSaved,
     onComplete,
 }: {
     pkg: ExitPackage;
@@ -37,6 +38,10 @@ export function RunScreen({
     /** Fee key carried inside a self-executable bundle; funds the graph-mode CPFP
      * bumps from an already-funded address instead of a freshly generated one. */
     embeddedFeeKeyHex?: string | null;
+    /** Whether this exit is genuinely recoverable from this browser. False when
+     * the save was rejected (quota, blocked storage) — the reassurance must not
+     * promise a resume point that does not exist. */
+    sessionSaved?: boolean;
     /** Called once when every step finished with no failures. */
     onComplete?: () => void;
 }) {
@@ -101,6 +106,7 @@ export function RunScreen({
             pkg={pkg}
             provider={provider}
             feeWallet={fee?.wallet}
+            sessionSaved={sessionSaved}
             onComplete={onComplete}
         />
     );
@@ -110,11 +116,13 @@ function ExecutionTimeline({
     pkg,
     provider,
     feeWallet,
+    sessionSaved,
     onComplete,
 }: {
     pkg: ExitPackage;
     provider: EsploraProvider;
     feeWallet?: FeeWalletHandle["wallet"];
+    sessionSaved?: boolean;
     onComplete?: () => void;
 }) {
     const [events, setEvents] = useState<Map<number, ExecutorEvent>>(new Map());
@@ -222,13 +230,23 @@ function ExecutionTimeline({
                             failed ? "bg-exit-dead" : done ? "bg-exit-ok" : "bg-exit-signal"
                         }
                     />
-                    {!done && (
-                        <p className="text-[11px] text-exit-ink-faint">
-                            Safe to close and reopen — this exit is saved in this browser and
-                            execution reads only the blockchain, so it resumes where it left off.
-                            Keep your package file to resume anywhere else.
-                        </p>
-                    )}
+                    {!done &&
+                        (sessionSaved ? (
+                            <p className="text-[11px] text-exit-ink-faint">
+                                Safe to close and reopen — this exit is saved in this browser and
+                                execution reads only the blockchain, so it resumes where it left
+                                off. Keep your package file to resume anywhere else.
+                            </p>
+                        ) : (
+                            // The save was rejected, so there is no resume point here.
+                            // Promising one would be the exact failure this whole
+                            // change set exists to remove.
+                            <p className="text-[11px] text-exit-wait">
+                                This browser could not save a resume point — keep your package file,
+                                you will need it to continue. Execution reads only the blockchain,
+                                so re-importing resumes where it left off.
+                            </p>
+                        ))}
                 </CardContent>
             </Card>
 
@@ -255,6 +273,12 @@ function ExecutionTimeline({
                         index={i}
                         last={i === pkg.steps.length - 1}
                         kindLabel={KIND_LABEL[step.kind]}
+                        // Every ExitStep kind carries exactly one identifying
+                        // txid: `broadcast` and `sweep` use `txid`, `package`
+                        // and `bump` use `parentTxid` (their child is derived).
+                        // The cast holds as long as that stays true; a new kind
+                        // with neither field would surface here as an empty hash
+                        // rather than a crash.
                         txid={
                             "txid" in step ? step.txid : (step as { parentTxid: string }).parentTxid
                         }

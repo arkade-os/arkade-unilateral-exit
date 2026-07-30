@@ -74,22 +74,7 @@ body {
     min-height: 100vh;
 }
 
-/* Numeric/hex data reads as data, not prose. */
-.tabular {
-    font-family: var(--font-mono);
-    font-variant-numeric: tabular-nums;
-    letter-spacing: -0.01em;
-}
-
-@keyframes pulse-flight {
-    0%,
-    100% {
-        opacity: 1;
-    }
-    50% {
-        opacity: 0.35;
-    }
-}
-.pulse {
-    animation: pulse-flight 1.4s ease-in-out infinite;
-}
+/* `.tabular` and `.pulse` used to live here. The exit UI moved into
+   @arkade-os/exit-ui, which cannot depend on classes an app happens to define,
+   so it uses plain Tailwind utilities instead (`font-mono tabular-nums
+   tracking-[-0.01em]`, `animate-pulse`). Nothing references the old rules. */

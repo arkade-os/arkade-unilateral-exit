@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { ExitPackage } from "@arkade-os/sdk";
-import { clearSession, loadSession, saveSession, type SessionStore } from "../src/session";
+import {
+    clearSession,
+    loadSession,
+    restoreSession,
+    saveSession,
+    type SessionStore,
+} from "../src/session";
 
 const pkg: ExitPackage = {
     version: 1,
@@ -111,6 +117,37 @@ describe("loadSession treats stored state as untrusted", () => {
     it("drops a malformed fee key rather than restoring it", () => {
         const bad = JSON.stringify({ pkg, screen: "run", feeKeyHex: "nope" });
         expect(loadSession(fakeStore({ "arkade-exit:session": bad }))?.feeKeyHex).toBeUndefined();
+    });
+});
+
+describe("restoreSession", () => {
+    const stored = { pkg, esploraUrl: "http://x/api", screen: "run" as const };
+
+    it("restores a stored session when the URL carries no package", () => {
+        const store = fakeStore();
+        saveSession(stored, store);
+        expect(restoreSession(new URL("https://x.io/"), store)).toMatchObject({ screen: "run" });
+    });
+
+    // A share link must win, or opening someone's link would silently run a
+    // different exit than the one they sent.
+    it("ignores a stored session when the URL carries a package", () => {
+        const store = fakeStore();
+        saveSession(stored, store);
+        expect(restoreSession(new URL("https://x.io/#pkg=SOMETHING"), store)).toBeNull();
+        expect(restoreSession(new URL("https://x.io/?pkg=SOMETHING"), store)).toBeNull();
+    });
+
+    // A run screen with no endpoint cannot execute, so it must not be restored
+    // as one — the user would face an inert screen with no way forward.
+    it("degrades a stored run screen with no endpoint back to review", () => {
+        const store = fakeStore();
+        saveSession({ pkg, screen: "run" }, store);
+        expect(restoreSession(new URL("https://x.io/"), store)?.screen).toBe("review");
+    });
+
+    it("returns null when nothing is stored", () => {
+        expect(restoreSession(new URL("https://x.io/"), fakeStore())).toBeNull();
     });
 });
 

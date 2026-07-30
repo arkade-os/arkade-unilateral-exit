@@ -1,8 +1,17 @@
 import type { ExitPackage } from "@arkade-os/sdk";
-import { parsePackageJson } from "./package";
+import { FEE_KEY_RE, packageParamFromUrl, parsePackageObject } from "./package";
 
+/**
+ * Where a resumable exit is kept.
+ *
+ * The stored value includes the graph-mode `feeKeyHex` — a live private key, in
+ * plaintext, for as long as the exit lasts. Its scope is deliberately tiny: it
+ * only ever holds the CPFP fee sats the user deposits, never VTXO value, so the
+ * worst case is losing that small remainder. It is still readable by anything
+ * with script access to this origin, so treat an exported bundle and this key
+ * as sensitive.
+ */
 const STORAGE_KEY = "arkade-exit:session";
-const FEE_KEY_RE = /^[0-9a-f]{64}$/;
 const SCREENS = ["review", "run"] as const;
 
 export type SessionScreen = (typeof SCREENS)[number];
@@ -30,7 +39,7 @@ export interface SessionStore {
     removeItem(key: string): void;
 }
 
-function defaultStore(): SessionStore | null {
+export function defaultStore(): SessionStore | null {
     try {
         return globalThis.localStorage ?? null;
     } catch {
@@ -91,7 +100,9 @@ export function loadSession(store: SessionStore | null = defaultStore()): ExitSe
         if (typeof screen !== "string" || !SCREENS.includes(screen as SessionScreen)) return null;
 
         // Same validation as the import path — never a second implementation.
-        const { pkg } = parsePackageJson(JSON.stringify(obj.pkg));
+        // `parsePackageObject` takes the already-parsed value, so a package with
+        // hundreds of full-hex steps isn't re-serialized and re-parsed here.
+        const { pkg } = parsePackageObject(obj.pkg);
 
         const esploraUrl = typeof obj.esploraUrl === "string" ? obj.esploraUrl : undefined;
         const feeKeyHex =
@@ -103,6 +114,28 @@ export function loadSession(store: SessionStore | null = defaultStore()): ExitSe
     } catch {
         return null;
     }
+}
+
+/**
+ * What to restore on mount, or null when there is nothing usable.
+ *
+ * A package in the URL always wins over a stored one, so share links stay
+ * predictable. A stored `run` screen without an endpoint cannot execute, so it
+ * degrades to `review` rather than rendering a screen that would sit inert.
+ *
+ * `url` and `store` are parameters rather than globals so both branches are
+ * testable — they are exactly where the original "resume doesn't work" bug
+ * could creep back in unnoticed.
+ */
+export function restoreSession(
+    url: URL,
+    store: SessionStore | null = defaultStore(),
+): ExitSession | null {
+    if (packageParamFromUrl(url)) return null;
+    const s = loadSession(store);
+    if (!s) return null;
+    if (s.screen === "run" && !s.esploraUrl) return { ...s, screen: "review" as const };
+    return s;
 }
 
 export function clearSession(store: SessionStore | null = defaultStore()): void {

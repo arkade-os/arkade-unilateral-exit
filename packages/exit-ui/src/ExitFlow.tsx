@@ -4,8 +4,7 @@ import { Component, useState, type ReactNode } from "react";
 import { ImportScreen } from "./screens/ImportScreen";
 import { ReviewScreen } from "./screens/ReviewScreen";
 import { RunScreen } from "./screens/RunScreen";
-import { packageParamFromUrl } from "./package";
-import { clearSession, loadSession, saveSession } from "./session";
+import { clearSession, restoreSession, saveSession } from "./session";
 import { Button } from "./ui/button";
 import { cn } from "./ui/cn";
 import { MONO } from "./ui/mono";
@@ -27,6 +26,11 @@ class ScreenErrorBoundary extends Component<{ children: ReactNode }, { error: Er
     static getDerivedStateFromError(error: Error) {
         return { error };
     }
+    // Without this the only trace of a render crash is the banner the user
+    // sees — debugging would depend on them reproducing it for us.
+    componentDidCatch(error: Error, info: unknown) {
+        console.error("[exit-ui] render error:", error, info);
+    }
     render() {
         if (this.state.error) {
             return (
@@ -35,7 +39,8 @@ class ScreenErrorBoundary extends Component<{ children: ReactNode }, { error: Er
                     <div>
                         <p className="font-medium">Couldn’t render this package</p>
                         <p className="mt-0.5 text-xs text-exit-dead/80">
-                            {this.state.error.message}. Load a different package to continue.
+                            {this.state.error.message}. Use “Load a different package” in the header
+                            to try another file.
                         </p>
                     </div>
                 </div>
@@ -46,16 +51,15 @@ class ScreenErrorBoundary extends Component<{ children: ReactNode }, { error: Er
 }
 
 /**
- * A package in the URL always wins over a stored one, so share links stay
- * predictable. Used as a lazy `useState` initialiser so it runs once.
+ * Read the current URL, or null when there isn't one.
+ *
+ * The package is browser-only today, but this is the single place that assumes
+ * a `window`. Guarding it here means an SSR shell renders the import screen
+ * instead of crashing during the first render.
  */
-function restoreSession() {
-    if (packageParamFromUrl(new URL(window.location.href))) return null;
-    const s = loadSession();
-    if (!s) return null;
-    // A run screen without an endpoint cannot execute; fall back to review.
-    if (s.screen === "run" && !s.esploraUrl) return { ...s, screen: "review" as const };
-    return s;
+function currentUrl(): URL | null {
+    if (typeof window === "undefined") return null;
+    return new URL(window.location.href);
 }
 
 /**
@@ -77,14 +81,25 @@ export function ExitFlow({
      * from its own bundler's env; the package never touches `import.meta.env`. */
     esploraOverride?: string;
 }) {
-    const [restored] = useState(restoreSession);
+    // Lazy initialiser so the URL and storage are read once, on mount.
+    const [restored] = useState(() => {
+        const url = currentUrl();
+        return url ? restoreSession(url) : null;
+    });
     const [screen, setScreen] = useState<Screen>(restored?.screen ?? "import");
     const [pkg, setPkg] = useState<ExitPackage | null>(restored?.pkg ?? null);
     const [feeKeyHex, setFeeKeyHex] = useState<string | null>(restored?.feeKeyHex ?? null);
     const [esplora, setEsplora] = useState<string>(restored?.esploraUrl ?? "");
     const [confirmingReset, setConfirmingReset] = useState(false);
     const [resumed, setResumed] = useState(!!restored);
+    // Starts false even on a restore: a session in storage is itself proof that
+    // the last save succeeded.
     const [saveFailed, setSaveFailed] = useState(false);
+    // Whether the exit on screen is actually recoverable from this browser.
+    // Restored sessions are by definition saved; a fresh import is saved only if
+    // `saveSession` succeeded.
+    const [sessionSaved, setSessionSaved] = useState(!!restored);
+    const [complete, setComplete] = useState(false);
 
     const reset = () => {
         clearSession();
@@ -95,6 +110,17 @@ export function ExitFlow({
         setConfirmingReset(false);
         setResumed(false);
         setSaveFailed(false);
+        setSessionSaved(false);
+        setComplete(false);
+    };
+
+    /** A clean finish drops the stored session — there is nothing left to
+     * resume — and with it the resumed banner and the confirmation gate. */
+    const onComplete = () => {
+        clearSession();
+        setResumed(false);
+        setSessionSaved(false);
+        setComplete(true);
     };
 
     /**
@@ -105,10 +131,12 @@ export function ExitFlow({
      * to resume, or to forget the exit locally.
      *
      * Forgetting is destructive to *resumability* whenever the package can't be
-     * trivially reloaded: after execution has begun, or when it was restored
-     * from storage rather than a file the user demonstrably still holds.
+     * trivially reloaded: while execution is still in flight, or when it was
+     * restored from storage rather than a file the user demonstrably still
+     * holds. Once the exit has finished there is nothing left to lose, so the
+     * confirmation would be pure friction.
      */
-    const forgetIsDestructive = screen === "run" || resumed;
+    const forgetIsDestructive = !complete && (screen === "run" || resumed);
 
     const onForget = () => {
         if (forgetIsDestructive && !confirmingReset) {
@@ -219,13 +247,13 @@ export function ExitFlow({
                                 setPkg(loaded.pkg);
                                 setFeeKeyHex(loaded.feeKeyHex ?? null);
                                 setScreen("review");
-                                setSaveFailed(
-                                    !saveSession({
-                                        pkg: loaded.pkg,
-                                        feeKeyHex: loaded.feeKeyHex,
-                                        screen: "review",
-                                    }),
-                                );
+                                const ok = saveSession({
+                                    pkg: loaded.pkg,
+                                    feeKeyHex: loaded.feeKeyHex,
+                                    screen: "review",
+                                });
+                                setSaveFailed(!ok);
+                                setSessionSaved(ok);
                             }}
                         />
                     )}
@@ -236,14 +264,14 @@ export function ExitFlow({
                             onContinue={(url) => {
                                 setEsplora(url);
                                 setScreen("run");
-                                setSaveFailed(
-                                    !saveSession({
-                                        pkg,
-                                        esploraUrl: url,
-                                        feeKeyHex: feeKeyHex ?? undefined,
-                                        screen: "run",
-                                    }),
-                                );
+                                const ok = saveSession({
+                                    pkg,
+                                    esploraUrl: url,
+                                    feeKeyHex: feeKeyHex ?? undefined,
+                                    screen: "run",
+                                });
+                                setSaveFailed(!ok);
+                                setSessionSaved(ok);
                             }}
                         />
                     )}
@@ -252,7 +280,8 @@ export function ExitFlow({
                             pkg={pkg}
                             esploraUrl={esplora}
                             embeddedFeeKeyHex={feeKeyHex}
-                            onComplete={clearSession}
+                            sessionSaved={sessionSaved}
+                            onComplete={onComplete}
                         />
                     )}
                 </ScreenErrorBoundary>
