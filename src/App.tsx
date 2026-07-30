@@ -1,5 +1,5 @@
 import type { ExitPackage } from "@arkade-os/sdk";
-import { DoorOpen, RotateCcw, ShieldAlert } from "lucide-react";
+import { DoorOpen, FileUp, ShieldAlert, Trash2 } from "lucide-react";
 import { Component, useState, type ReactNode } from "react";
 import { ImportScreen } from "@/components/ImportScreen";
 import { ReviewScreen } from "@/components/ReviewScreen";
@@ -79,10 +79,21 @@ export function App() {
         setSaveFailed(false);
     };
 
-    // Once execution has started, guard "Start over": it doesn't stop broadcasts
-    // already made and it discards the live progress view.
-    const onStartOver = () => {
-        if (screen === "run" && !confirmingReset) {
+    /**
+     * There is no "start over" for an exit. This app is keyless, so it cannot
+     * produce a different package for the same VTXOs — only the wallet that
+     * owns them can. A funded package has already broadcast its splitter at
+     * prepare time, before this app ever saw it. So the only real actions are
+     * to resume, or to forget the exit locally.
+     *
+     * Forgetting is destructive to *resumability* whenever the package can't be
+     * trivially reloaded: after execution has begun, or when it was restored
+     * from storage rather than a file the user demonstrably still holds.
+     */
+    const forgetIsDestructive = screen === "run" || resumed;
+
+    const onForget = () => {
+        if (forgetIsDestructive && !confirmingReset) {
             setConfirmingReset(true);
             return;
         }
@@ -110,11 +121,12 @@ export function App() {
                 {pkg &&
                     (confirmingReset ? (
                         <div className="flex items-center gap-2">
-                            <span className="hidden text-[11px] text-ink-faint sm:inline">
-                                Broadcasts already sent won’t stop.
+                            <span className="hidden max-w-xs text-right text-[11px] text-ink-faint sm:inline">
+                                Only forgets it on this device. Transactions already broadcast stay
+                                onchain, and you’ll need the package file to resume.
                             </span>
                             <Button size="sm" variant="danger" onClick={reset}>
-                                <RotateCcw className="size-3.5" /> Confirm start over
+                                Forget it
                             </Button>
                             <Button
                                 size="sm"
@@ -125,8 +137,16 @@ export function App() {
                             </Button>
                         </div>
                     ) : (
-                        <Button variant="ghost" size="sm" onClick={onStartOver}>
-                            <RotateCcw className="size-3.5" /> Start over
+                        <Button variant="ghost" size="sm" onClick={onForget}>
+                            {screen === "run" ? (
+                                <>
+                                    <Trash2 className="size-3.5" /> Forget this exit
+                                </>
+                            ) : (
+                                <>
+                                    <FileUp className="size-3.5" /> Load a different package
+                                </>
+                            )}
                         </Button>
                     ))}
             </header>
@@ -170,14 +190,12 @@ export function App() {
                 {resumed && (
                     <div className="mb-4 flex items-center justify-between gap-3 rounded-[var(--radius)] border border-line bg-panel-2/60 px-3 py-2 text-xs text-ink-dim">
                         <span>Resumed a saved exit from this browser.</span>
-                        <div className="flex items-center gap-1">
-                            <Button size="sm" variant="ghost" onClick={reset}>
-                                Discard
-                            </Button>
-                            <Button size="sm" variant="ghost" onClick={() => setResumed(false)}>
-                                Dismiss
-                            </Button>
-                        </div>
+                        {/* Only "Dismiss" here — the header owns the single
+                            destructive action, so there is one way to forget an
+                            exit rather than two. */}
+                        <Button size="sm" variant="ghost" onClick={() => setResumed(false)}>
+                            Dismiss
+                        </Button>
                     </div>
                 )}
                 {saveFailed && (
