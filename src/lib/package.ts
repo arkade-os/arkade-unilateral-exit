@@ -67,11 +67,6 @@ function assertRenderable(pkg: ExitPackage): void {
 }
 
 /**
- * Interpret already-parsed JSON as either the self-executable bundle (envelope
- * with an embedded fee key) or a bare SDK exit package. Either way the package
- * itself is validated by the SDK — the single source of truth for the format.
- */
-/**
  * Interpret an already-parsed value as either the self-executable bundle
  * (envelope with an embedded fee key) or a bare SDK exit package. Either way the
  * package itself is validated by the SDK — the single source of truth.

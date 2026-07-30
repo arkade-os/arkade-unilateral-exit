@@ -1,11 +1,11 @@
 import type { ExitPackage } from "@arkade-os/sdk";
 import { DoorOpen, FileUp, ShieldAlert, Trash2 } from "lucide-react";
-import { Component, useState, type ReactNode } from "react";
+import { Component, useCallback, useState, type ReactNode } from "react";
 import { ImportScreen } from "@/components/ImportScreen";
 import { ReviewScreen } from "@/components/ReviewScreen";
 import { RunScreen } from "@/components/RunScreen";
 import { Button } from "@/components/ui/button";
-import { clearSession, restoreSession, saveSession } from "@/lib/session";
+import { clearSession, forgetNeedsConfirmation, restoreSession, saveSession } from "@/lib/session";
 import { cn } from "@/lib/utils";
 
 type Screen = "import" | "review" | "run";
@@ -18,8 +18,8 @@ const STEPS: { id: Screen; label: string }[] = [
 /**
  * Defense-in-depth: a malformed package that clears decode validation but still
  * throws during render must not blank the whole app. Keyed by screen so it
- * resets on navigation / "Start over". The header (with Start over) lives
- * outside it, so the user can always recover.
+ * resets on navigation. The header — which owns the only way to load a
+ * different package — lives outside it, so the user can always recover.
  */
 class ScreenErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
     state: { error: Error | null } = { error: null };
@@ -53,7 +53,11 @@ export function App() {
     const [feeKeyHex, setFeeKeyHex] = useState<string | null>(restored?.feeKeyHex ?? null);
     const [esplora, setEsplora] = useState<string>(restored?.esploraUrl ?? "");
     const [confirmingReset, setConfirmingReset] = useState(false);
-    const [resumed, setResumed] = useState(!!restored);
+    // Provenance, NOT banner visibility. This feeds the confirmation gate: a
+    // package that came from storage may be one the user no longer has a file
+    // for. Dismissing the banner must not change this — see `showResumeBanner`.
+    const [restoredFromStorage, setRestoredFromStorage] = useState(!!restored);
+    const [showResumeBanner, setShowResumeBanner] = useState(!!restored);
     // Starts false even on a restore: a session in storage is itself proof that
     // the last save succeeded.
     const [saveFailed, setSaveFailed] = useState(false);
@@ -70,20 +74,27 @@ export function App() {
         setEsplora("");
         setScreen("import");
         setConfirmingReset(false);
-        setResumed(false);
+        setRestoredFromStorage(false);
+        setShowResumeBanner(false);
         setSaveFailed(false);
         setSessionSaved(false);
         setComplete(false);
     };
 
     /** A clean finish drops the stored session — there is nothing left to
-     * resume — and with it the resumed banner and the confirmation gate. */
-    const onComplete = () => {
+     * resume — and with it the banner and the confirmation gate.
+     *
+     * Memoised: it is in the dependency list of the effect that calls it, so an
+     * unstable identity would re-fire that effect on the re-render this very
+     * handler causes. Harmless today because every operation here is idempotent,
+     * but only by luck. */
+    const onComplete = useCallback(() => {
         clearSession();
-        setResumed(false);
+        setRestoredFromStorage(false);
+        setShowResumeBanner(false);
         setSessionSaved(false);
         setComplete(true);
-    };
+    }, []);
 
     /**
      * There is no "start over" for an exit. This app is keyless, so it cannot
@@ -92,13 +103,14 @@ export function App() {
      * prepare time, before this app ever saw it. So the only real actions are
      * to resume, or to forget the exit locally.
      *
-     * Forgetting is destructive to *resumability* whenever the package can't be
-     * trivially reloaded: while execution is still in flight, or when it was
-     * restored from storage rather than a file the user demonstrably still
-     * holds. Once the exit has finished there is nothing left to lose, so the
-     * confirmation would be pure friction.
+     * The rule for when forgetting needs confirming lives in `session.ts` and is
+     * unit-tested — it is subtle enough to have been wrong twice.
      */
-    const forgetIsDestructive = !complete && (screen === "run" || resumed);
+    const forgetIsDestructive = forgetNeedsConfirmation({
+        complete,
+        isRunning: screen === "run",
+        restoredFromStorage,
+    });
 
     const onForget = () => {
         if (forgetIsDestructive && !confirmingReset) {
@@ -195,13 +207,19 @@ export function App() {
             </nav>
 
             <main className="flex-1">
-                {resumed && (
+                {showResumeBanner && (
                     <div className="mb-4 flex items-center justify-between gap-3 rounded-[var(--radius)] border border-line bg-panel-2/60 px-3 py-2 text-xs text-ink-dim">
                         <span>Resumed a saved exit from this browser.</span>
                         {/* Only "Dismiss" here — the header owns the single
                             destructive action, so there is one way to forget an
-                            exit rather than two. */}
-                        <Button size="sm" variant="ghost" onClick={() => setResumed(false)}>
+                            exit rather than two. Dismissing hides the banner and
+                            nothing else: the confirmation gate keys off
+                            `restoredFromStorage`, which this does not touch. */}
+                        <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => setShowResumeBanner(false)}
+                        >
                             Dismiss
                         </Button>
                     </div>

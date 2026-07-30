@@ -117,6 +117,29 @@ export function loadSession(store: SessionStore | null = defaultStore()): ExitSe
 }
 
 /**
+ * Whether forgetting the exit on screen would destroy something the user cannot
+ * get back, and therefore needs confirming.
+ *
+ * A pure function, and tested, because the rule is subtle and has been wrong
+ * twice. In particular `restoredFromStorage` is *provenance*, not banner
+ * visibility: conflating the two means dismissing the resumed banner silently
+ * disarms the gate, and the next "load a different package" wipes the only saved
+ * copy without asking.
+ *
+ * - in flight — broadcasts are already out and live progress would be lost
+ * - restored from storage — the user may no longer hold the package file
+ * - finished — nothing left to lose, so confirming is pure friction
+ */
+export function forgetNeedsConfirmation(state: {
+    complete: boolean;
+    isRunning: boolean;
+    restoredFromStorage: boolean;
+}): boolean {
+    if (state.complete) return false;
+    return state.isRunning || state.restoredFromStorage;
+}
+
+/**
  * What to restore on mount, or null when there is nothing usable.
  *
  * A package in the URL always wins over a stored one, so share links stay
