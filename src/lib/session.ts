@@ -44,6 +44,11 @@ function defaultStore(): SessionStore | null {
  * hex for every step and localStorage is ~5 MB of UTF-16, so a large exit can
  * exceed quota — and a failed save must not interrupt a running exit.
  *
+ * On failure any previously stored session is dropped. Leaving it would be
+ * worse than storing nothing: the next load would restore a *different* exit
+ * than the one on screen, so the user would resume the wrong package. Storing
+ * nothing merely costs them the resume.
+ *
  * @returns false when the session could not be stored.
  */
 export function saveSession(s: ExitSession, store: SessionStore | null = defaultStore()): boolean {
@@ -52,6 +57,12 @@ export function saveSession(s: ExitSession, store: SessionStore | null = default
         store.setItem(STORAGE_KEY, JSON.stringify(s));
         return true;
     } catch {
+        try {
+            store.removeItem(STORAGE_KEY);
+        } catch {
+            // Storage is entirely unavailable. Nothing further to do — the
+            // caller already learns the save failed from the return value.
+        }
         return false;
     }
 }
