@@ -135,6 +135,28 @@ export function ExitFlow({
     }, []);
 
     /**
+     * A regenerated fee key has to be written back into the session.
+     *
+     * Only bundles carry a `feeKeyHex`, and only they are affected: a plain
+     * package re-reads `arkade-exit:fee-key`, which `resetFeeKey` already
+     * updated. For a bundle the session still held the *original* key, so a
+     * reload after regenerating would show the old funding address and strand
+     * anything deposited to the new one.
+     */
+    const onFeeKeyRegenerated = (newKey: string) => {
+        setFeeKeyHex(newKey);
+        if (!pkg) return;
+        const ok = saveSession({
+            pkg,
+            esploraUrl: esplora,
+            feeKeyHex: newKey,
+            screen: "run",
+        });
+        setSaveFailed(!ok);
+        setSessionSaved(ok);
+    };
+
+    /**
      * There is no "start over" for an exit. This executor is keyless, so it
      * cannot produce a different package for the same VTXOs — only the wallet
      * that owns them can. A funded package has already broadcast its splitter at
@@ -299,6 +321,7 @@ export function ExitFlow({
                             esploraUrl={esplora}
                             embeddedFeeKeyHex={feeKeyHex}
                             sessionSaved={sessionSaved}
+                            onFeeKeyRegenerated={onFeeKeyRegenerated}
                             onComplete={onComplete}
                         />
                     )}

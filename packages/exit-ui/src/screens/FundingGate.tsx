@@ -45,7 +45,11 @@ export function FundingGate({
     required: number;
     pkg: ExitPackage;
     onReady: () => void;
-    onRegenerate: () => void;
+    /** Receives the newly minted key. It must be carried back up, not just
+     * signalled: a self-executable bundle stores its fee key in the session, and
+     * a stale one there would restore the *old* funding address after a reload —
+     * stranding whatever was deposited to the new one. */
+    onRegenerate: (newFeeKeyHex: string) => void;
 }) {
     const [balance, setBalance] = useState(0);
     const [copied, setCopied] = useState(false);
@@ -161,10 +165,7 @@ export function FundingGate({
                         <Button
                             size="sm"
                             variant="ghost"
-                            onClick={() => {
-                                resetFeeKey();
-                                onRegenerate();
-                            }}
+                            onClick={() => onRegenerate(resetFeeKey())}
                             title="Discard this fee key and generate a new one"
                         >
                             <RefreshCw className="size-3.5" /> New key

@@ -31,6 +31,7 @@ export function RunScreen({
     esploraUrl,
     embeddedFeeKeyHex,
     sessionSaved,
+    onFeeKeyRegenerated,
     onComplete,
 }: {
     pkg: ExitPackage;
@@ -38,6 +39,11 @@ export function RunScreen({
     /** Fee key carried inside a self-executable bundle; funds the graph-mode CPFP
      * bumps from an already-funded address instead of a freshly generated one. */
     embeddedFeeKeyHex?: string | null;
+    /** Fired when the user mints a new fee key, so the caller can persist it.
+     * `feeKeyNonce` below is local state and resets on remount, so without this
+     * a reload would fall back to the bundle's original key and show the old
+     * funding address. */
+    onFeeKeyRegenerated?: (newFeeKeyHex: string) => void;
     /** Whether this exit is genuinely recoverable from this browser. False when
      * the save was rejected (quota, blocked storage) — the reassurance must not
      * promise a resume point that does not exist. */
@@ -92,7 +98,10 @@ export function RunScreen({
                 required={pkg.totals.fundingRequiredSats}
                 pkg={pkg}
                 onReady={() => setPhase("running")}
-                onRegenerate={() => setFeeKeyNonce((n) => n + 1)}
+                onRegenerate={(newKey) => {
+                    setFeeKeyNonce((n) => n + 1);
+                    onFeeKeyRegenerated?.(newKey);
+                }}
             />
         );
     }
