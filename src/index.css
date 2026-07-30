@@ -1,9 +1,14 @@
 @import "tailwindcss";
 
-/* Tailwind does not scan workspace packages unless told to. Without this, every
-   class inside @arkade-os/exit-ui compiles to nothing and its components render
-   unstyled — which no typecheck, test or build would catch. */
-@source "../packages/exit-ui/src";
+/* Tailwind does not scan dependencies unless told to. Without this, every class
+   inside @arkade-os/exit-ui compiles to nothing and its components render
+   unstyled — which no typecheck, test or build would catch.
+
+   Deliberately the node_modules path to the *built* output rather than
+   ../packages/exit-ui/src: it is exactly what a consumer outside this repo has
+   to write, so this app exercises the same mechanism the explorer will, and it
+   scans precisely what ships. Class strings survive tsup unmangled. */
+@source "../node_modules/@arkade-os/exit-ui/dist";
 
 /*
  * "Operator console" design system. Deliberately NOT the shadcn violet
