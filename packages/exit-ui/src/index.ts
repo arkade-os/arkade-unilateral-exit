@@ -2,16 +2,21 @@ export { esploraUrlFor } from "./esplora";
 export { loadOrCreateFeeKey, resetFeeKey, makeFeeWallet, type FeeWalletHandle } from "./feeWallet";
 export {
     parsePackageJson,
+    parsePackageObject,
     decodePackageBlob,
     encodeExitBundle,
     packageParamFromUrl,
     readFileText,
+    FEE_KEY_RE,
     type LoadedPackage,
 } from "./package";
 export {
     saveSession,
     loadSession,
     clearSession,
+    restoreSession,
+    forgetNeedsConfirmation,
+    defaultStore,
     type ExitSession,
     type SessionStore,
     type SessionScreen,
