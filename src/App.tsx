@@ -5,8 +5,7 @@ import { ImportScreen } from "@/components/ImportScreen";
 import { ReviewScreen } from "@/components/ReviewScreen";
 import { RunScreen } from "@/components/RunScreen";
 import { Button } from "@/components/ui/button";
-import { packageParamFromUrl } from "@/lib/package";
-import { clearSession, loadSession, saveSession } from "@/lib/session";
+import { clearSession, restoreSession, saveSession } from "@/lib/session";
 import { cn } from "@/lib/utils";
 
 type Screen = "import" | "review" | "run";
@@ -35,7 +34,8 @@ class ScreenErrorBoundary extends Component<{ children: ReactNode }, { error: Er
                     <div>
                         <p className="font-medium">Couldn’t render this package</p>
                         <p className="mt-0.5 text-xs text-dead/80">
-                            {this.state.error.message}. Use “Start over” to load a different one.
+                            {this.state.error.message}. Use “Load a different package” in the header
+                            to try another file.
                         </p>
                     </div>
                 </div>
@@ -45,28 +45,23 @@ class ScreenErrorBoundary extends Component<{ children: ReactNode }, { error: Er
     }
 }
 
-/**
- * A package in the URL always wins over a stored one, so share links stay
- * predictable. Used as a lazy `useState` initialiser so it runs once.
- */
-function restoreSession() {
-    if (packageParamFromUrl(new URL(window.location.href))) return null;
-    const s = loadSession();
-    if (!s) return null;
-    // A run screen without an endpoint cannot execute; fall back to review.
-    if (s.screen === "run" && !s.esploraUrl) return { ...s, screen: "review" as const };
-    return s;
-}
-
 export function App() {
-    const [restored] = useState(restoreSession);
+    // Lazy initialiser so the URL and storage are read once, on mount.
+    const [restored] = useState(() => restoreSession(new URL(window.location.href)));
     const [screen, setScreen] = useState<Screen>(restored?.screen ?? "import");
     const [pkg, setPkg] = useState<ExitPackage | null>(restored?.pkg ?? null);
     const [feeKeyHex, setFeeKeyHex] = useState<string | null>(restored?.feeKeyHex ?? null);
     const [esplora, setEsplora] = useState<string>(restored?.esploraUrl ?? "");
     const [confirmingReset, setConfirmingReset] = useState(false);
     const [resumed, setResumed] = useState(!!restored);
+    // Starts false even on a restore: a session in storage is itself proof that
+    // the last save succeeded.
     const [saveFailed, setSaveFailed] = useState(false);
+    // Whether the exit currently on screen is actually recoverable from this
+    // browser. Restored sessions are by definition saved; a fresh import is
+    // saved only if `saveSession` succeeded.
+    const [sessionSaved, setSessionSaved] = useState(!!restored);
+    const [complete, setComplete] = useState(false);
 
     const reset = () => {
         clearSession();
@@ -77,6 +72,17 @@ export function App() {
         setConfirmingReset(false);
         setResumed(false);
         setSaveFailed(false);
+        setSessionSaved(false);
+        setComplete(false);
+    };
+
+    /** A clean finish drops the stored session — there is nothing left to
+     * resume — and with it the resumed banner and the confirmation gate. */
+    const onComplete = () => {
+        clearSession();
+        setResumed(false);
+        setSessionSaved(false);
+        setComplete(true);
     };
 
     /**
@@ -87,10 +93,12 @@ export function App() {
      * to resume, or to forget the exit locally.
      *
      * Forgetting is destructive to *resumability* whenever the package can't be
-     * trivially reloaded: after execution has begun, or when it was restored
-     * from storage rather than a file the user demonstrably still holds.
+     * trivially reloaded: while execution is still in flight, or when it was
+     * restored from storage rather than a file the user demonstrably still
+     * holds. Once the exit has finished there is nothing left to lose, so the
+     * confirmation would be pure friction.
      */
-    const forgetIsDestructive = screen === "run" || resumed;
+    const forgetIsDestructive = !complete && (screen === "run" || resumed);
 
     const onForget = () => {
         if (forgetIsDestructive && !confirmingReset) {
@@ -211,13 +219,13 @@ export function App() {
                                 setPkg(loaded.pkg);
                                 setFeeKeyHex(loaded.feeKeyHex ?? null);
                                 setScreen("review");
-                                setSaveFailed(
-                                    !saveSession({
-                                        pkg: loaded.pkg,
-                                        feeKeyHex: loaded.feeKeyHex,
-                                        screen: "review",
-                                    }),
-                                );
+                                const ok = saveSession({
+                                    pkg: loaded.pkg,
+                                    feeKeyHex: loaded.feeKeyHex,
+                                    screen: "review",
+                                });
+                                setSaveFailed(!ok);
+                                setSessionSaved(ok);
                             }}
                         />
                     )}
@@ -227,14 +235,14 @@ export function App() {
                             onContinue={(url) => {
                                 setEsplora(url);
                                 setScreen("run");
-                                setSaveFailed(
-                                    !saveSession({
-                                        pkg,
-                                        esploraUrl: url,
-                                        feeKeyHex: feeKeyHex ?? undefined,
-                                        screen: "run",
-                                    }),
-                                );
+                                const ok = saveSession({
+                                    pkg,
+                                    esploraUrl: url,
+                                    feeKeyHex: feeKeyHex ?? undefined,
+                                    screen: "run",
+                                });
+                                setSaveFailed(!ok);
+                                setSessionSaved(ok);
                             }}
                         />
                     )}
@@ -243,7 +251,8 @@ export function App() {
                             pkg={pkg}
                             esploraUrl={esplora}
                             embeddedFeeKeyHex={feeKeyHex}
-                            onComplete={clearSession}
+                            sessionSaved={sessionSaved}
+                            onComplete={onComplete}
                         />
                     )}
                 </ScreenErrorBoundary>

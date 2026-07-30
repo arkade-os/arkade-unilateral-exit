@@ -36,7 +36,11 @@ export interface LoadedPackage {
 
 /** Marker on the self-executable envelope (distinguishes it from a bare package). */
 const BUNDLE_MARKER = "arkadeExitBundle";
-const FEE_KEY_RE = /^[0-9a-f]{64}$/;
+
+/** Shape of an ephemeral fee key: 32 bytes, lowercase hex. Exported so the
+ * session store validates against the same constant rather than its own copy —
+ * two independent regexes would drift silently. */
+export const FEE_KEY_RE = /^[0-9a-f]{64}$/;
 
 /**
  * The SDK's `deserializeExitPackage` validates `steps` but NOT `totals` or the
@@ -67,13 +71,17 @@ function assertRenderable(pkg: ExitPackage): void {
  * with an embedded fee key) or a bare SDK exit package. Either way the package
  * itself is validated by the SDK — the single source of truth for the format.
  */
-function fromParsedJson(text: string): LoadedPackage {
-    let obj: unknown;
-    try {
-        obj = JSON.parse(text);
-    } catch {
-        throw new Error("not valid JSON");
-    }
+/**
+ * Interpret an already-parsed value as either the self-executable bundle
+ * (envelope with an embedded fee key) or a bare SDK exit package. Either way the
+ * package itself is validated by the SDK — the single source of truth.
+ *
+ * Exposed separately from {@link parsePackageJson} so callers holding a parsed
+ * object (the session store) do not have to re-serialize and re-parse it. A
+ * package carries full transaction hex for every step, so that round-trip
+ * materializes every hex string an extra time on each page load.
+ */
+export function parsePackageObject(obj: unknown): LoadedPackage {
     if (obj && typeof obj === "object" && BUNDLE_MARKER in obj) {
         const bundle = obj as { pkg?: unknown; feeKeyHex?: unknown };
         const pkg = deserializeExitPackage(JSON.stringify(bundle.pkg));
@@ -84,7 +92,7 @@ function fromParsedJson(text: string): LoadedPackage {
                 : undefined;
         return { pkg, feeKeyHex };
     }
-    const pkg = deserializeExitPackage(text);
+    const pkg = deserializeExitPackage(JSON.stringify(obj));
     assertRenderable(pkg);
     return { pkg };
 }
@@ -95,7 +103,13 @@ function fromParsedJson(text: string): LoadedPackage {
  * source of truth for the format — the UI never re-implements it.
  */
 export function parsePackageJson(text: string): LoadedPackage {
-    return fromParsedJson(text);
+    let obj: unknown;
+    try {
+        obj = JSON.parse(text);
+    } catch {
+        throw new Error("not valid JSON");
+    }
+    return parsePackageObject(obj);
 }
 
 /**
