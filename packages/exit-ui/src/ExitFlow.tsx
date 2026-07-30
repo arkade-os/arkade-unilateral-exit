@@ -1,10 +1,10 @@
 import type { ExitPackage } from "@arkade-os/sdk";
 import { FileUp, ShieldAlert, Trash2 } from "lucide-react";
-import { Component, useState, type ReactNode } from "react";
+import { Component, useCallback, useState, type ReactNode } from "react";
 import { ImportScreen } from "./screens/ImportScreen";
 import { ReviewScreen } from "./screens/ReviewScreen";
 import { RunScreen } from "./screens/RunScreen";
-import { clearSession, restoreSession, saveSession } from "./session";
+import { clearSession, forgetNeedsConfirmation, restoreSession, saveSession } from "./session";
 import { Button } from "./ui/button";
 import { cn } from "./ui/cn";
 import { MONO } from "./ui/mono";
@@ -91,7 +91,11 @@ export function ExitFlow({
     const [feeKeyHex, setFeeKeyHex] = useState<string | null>(restored?.feeKeyHex ?? null);
     const [esplora, setEsplora] = useState<string>(restored?.esploraUrl ?? "");
     const [confirmingReset, setConfirmingReset] = useState(false);
-    const [resumed, setResumed] = useState(!!restored);
+    // Provenance, NOT banner visibility. This feeds the confirmation gate: a
+    // package that came from storage may be one the user no longer holds a file
+    // for. Dismissing the banner must not change it — see `showResumeBanner`.
+    const [restoredFromStorage, setRestoredFromStorage] = useState(!!restored);
+    const [showResumeBanner, setShowResumeBanner] = useState(!!restored);
     // Starts false even on a restore: a session in storage is itself proof that
     // the last save succeeded.
     const [saveFailed, setSaveFailed] = useState(false);
@@ -108,20 +112,27 @@ export function ExitFlow({
         setEsplora("");
         setScreen("import");
         setConfirmingReset(false);
-        setResumed(false);
+        setRestoredFromStorage(false);
+        setShowResumeBanner(false);
         setSaveFailed(false);
         setSessionSaved(false);
         setComplete(false);
     };
 
     /** A clean finish drops the stored session — there is nothing left to
-     * resume — and with it the resumed banner and the confirmation gate. */
-    const onComplete = () => {
+     * resume — and with it the banner and the confirmation gate.
+     *
+     * Memoised: it sits in the dependency list of the effect that calls it, so
+     * an unstable identity would re-fire that effect on the re-render this very
+     * handler causes. Harmless today because every operation here is idempotent,
+     * but only by luck. */
+    const onComplete = useCallback(() => {
         clearSession();
-        setResumed(false);
+        setRestoredFromStorage(false);
+        setShowResumeBanner(false);
         setSessionSaved(false);
         setComplete(true);
-    };
+    }, []);
 
     /**
      * There is no "start over" for an exit. This executor is keyless, so it
@@ -130,13 +141,14 @@ export function ExitFlow({
      * prepare time, before this code ever saw it. So the only real actions are
      * to resume, or to forget the exit locally.
      *
-     * Forgetting is destructive to *resumability* whenever the package can't be
-     * trivially reloaded: while execution is still in flight, or when it was
-     * restored from storage rather than a file the user demonstrably still
-     * holds. Once the exit has finished there is nothing left to lose, so the
-     * confirmation would be pure friction.
+     * The rule for when forgetting needs confirming lives in `session.ts` and is
+     * unit-tested — it is subtle enough to have been wrong twice.
      */
-    const forgetIsDestructive = !complete && (screen === "run" || resumed);
+    const forgetIsDestructive = forgetNeedsConfirmation({
+        complete,
+        isRunning: screen === "run",
+        restoredFromStorage,
+    });
 
     const onForget = () => {
         if (forgetIsDestructive && !confirmingReset) {
@@ -223,13 +235,19 @@ export function ExitFlow({
             </nav>
 
             <main className="flex-1">
-                {resumed && (
+                {showResumeBanner && (
                     <div className="mb-4 flex items-center justify-between gap-3 rounded-[var(--radius-exit)] border border-exit-line bg-exit-panel-2/60 px-3 py-2 text-xs text-exit-ink-dim">
                         <span>Resumed a saved exit from this browser.</span>
                         {/* Only "Dismiss" here — the header owns the single
                             destructive action, so there is one way to forget an
-                            exit rather than two. */}
-                        <Button size="sm" variant="ghost" onClick={() => setResumed(false)}>
+                            exit rather than two. Dismissing hides the banner and
+                            nothing else: the confirmation gate keys off
+                            `restoredFromStorage`, which this does not touch. */}
+                        <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => setShowResumeBanner(false)}
+                        >
                             Dismiss
                         </Button>
                     </div>

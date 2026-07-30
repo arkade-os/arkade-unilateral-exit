@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { ExitPackage } from "@arkade-os/sdk";
 import {
     clearSession,
+    forgetNeedsConfirmation,
     loadSession,
     restoreSession,
     saveSession,
@@ -148,6 +149,32 @@ describe("restoreSession", () => {
 
     it("returns null when nothing is stored", () => {
         expect(restoreSession(new URL("https://x.io/"), fakeStore())).toBeNull();
+    });
+});
+
+describe("forgetNeedsConfirmation", () => {
+    const base = { complete: false, isRunning: false, restoredFromStorage: false };
+
+    it("does not confirm for a package the user just imported and hasn't run", () => {
+        expect(forgetNeedsConfirmation(base)).toBe(false);
+    });
+
+    it("confirms while execution is in flight", () => {
+        expect(forgetNeedsConfirmation({ ...base, isRunning: true })).toBe(true);
+    });
+
+    // The trap: a restored session is destructive to forget even on the review
+    // screen, because the user may no longer hold the package file. This is
+    // provenance, not banner visibility — dismissing the banner must not disarm
+    // it, which is exactly the regression this function exists to prevent.
+    it("confirms for a restored session even when not running", () => {
+        expect(forgetNeedsConfirmation({ ...base, restoredFromStorage: true })).toBe(true);
+    });
+
+    it("stops confirming once the exit has finished cleanly", () => {
+        expect(
+            forgetNeedsConfirmation({ complete: true, isRunning: true, restoredFromStorage: true }),
+        ).toBe(false);
     });
 });
 
