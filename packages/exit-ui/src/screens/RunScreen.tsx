@@ -224,8 +224,9 @@ function ExecutionTimeline({
                     />
                     {!done && (
                         <p className="text-[11px] text-exit-ink-faint">
-                            Safe to close and reopen — execution reads only the blockchain, so it
-                            resumes where it left off.
+                            Safe to close and reopen — this exit is saved in this browser and
+                            execution reads only the blockchain, so it resumes where it left off.
+                            Keep your package file to resume anywhere else.
                         </p>
                     )}
                 </CardContent>

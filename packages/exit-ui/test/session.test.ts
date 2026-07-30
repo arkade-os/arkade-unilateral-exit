@@ -59,6 +59,38 @@ describe("saveSession / loadSession", () => {
         };
         expect(saveSession({ pkg, screen: "review" }, store)).toBe(false);
     });
+
+    // A failed save must not leave the PREVIOUS session behind: the next load
+    // would restore a different exit than the one on screen, so the user would
+    // resume the wrong package.
+    it("drops any previously stored session when a save fails", () => {
+        const store = fakeStore();
+        saveSession({ pkg, esploraUrl: "http://old/api", screen: "review" }, store);
+        expect(loadSession(store)).not.toBeNull();
+
+        const older = { ...pkg, sweepAddress: "bcrt1pthisistheoldone" };
+        const failing: SessionStore = {
+            ...store,
+            setItem: () => {
+                throw new DOMException("quota", "QuotaExceededError");
+            },
+        };
+        expect(saveSession({ pkg: older, screen: "review" }, failing)).toBe(false);
+        expect(loadSession(store)).toBeNull();
+    });
+
+    it("still returns false when clearing after a failed save also throws", () => {
+        const store: SessionStore = {
+            getItem: () => null,
+            setItem: () => {
+                throw new DOMException("quota", "QuotaExceededError");
+            },
+            removeItem: () => {
+                throw new Error("storage is entirely unavailable");
+            },
+        };
+        expect(saveSession({ pkg, screen: "review" }, store)).toBe(false);
+    });
 });
 
 describe("loadSession treats stored state as untrusted", () => {
