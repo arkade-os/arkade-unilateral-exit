@@ -20,12 +20,15 @@ export function RunScreen({
     pkg,
     esploraUrl,
     embeddedFeeKeyHex,
+    onComplete,
 }: {
     pkg: ExitPackage;
     esploraUrl: string;
     /** Fee key carried inside a self-executable bundle; funds the graph-mode CPFP
      * bumps from an already-funded address instead of a freshly generated one. */
     embeddedFeeKeyHex?: string | null;
+    /** Called once when every step finished with no failures. */
+    onComplete?: () => void;
 }) {
     const graph = pkg.mode === "graph";
     // Graph mode always shows the funding gate — even with an embedded fee key it
@@ -83,17 +86,26 @@ export function RunScreen({
     if (graph && !fee)
         return feeError ? feeErrorBanner : <Centered>Preparing fee wallet…</Centered>;
 
-    return <ExecutionTimeline pkg={pkg} provider={provider} feeWallet={fee?.wallet} />;
+    return (
+        <ExecutionTimeline
+            pkg={pkg}
+            provider={provider}
+            feeWallet={fee?.wallet}
+            onComplete={onComplete}
+        />
+    );
 }
 
 function ExecutionTimeline({
     pkg,
     provider,
     feeWallet,
+    onComplete,
 }: {
     pkg: ExitPackage;
     provider: EsploraProvider;
     feeWallet?: FeeWalletHandle["wallet"];
+    onComplete?: () => void;
 }) {
     const [events, setEvents] = useState<Map<number, ExecutorEvent>>(new Map());
     const [warnings, setWarnings] = useState<string[]>([]);
@@ -164,6 +176,13 @@ function ExecutionTimeline({
     }).length;
     const failed = [...events.values()].filter((e) => e.status === "failed").length;
     const pct = pkg.steps.length ? (confirmed / pkg.steps.length) * 100 : 0;
+
+    // Report a clean finish so the caller can drop the saved session. Failures
+    // are deliberately not reported — a failed exit stays saved so it can be
+    // retried. `done` only flips once, so this fires at most once.
+    useEffect(() => {
+        if (done && failed === 0) onComplete?.();
+    }, [done, failed, onComplete]);
 
     return (
         <div className="flex flex-col gap-5">
