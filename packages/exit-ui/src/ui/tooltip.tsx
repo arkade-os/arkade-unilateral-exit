@@ -1,11 +1,11 @@
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 import type { ReactNode } from "react";
-import { cn } from "@/lib/utils";
+import { cn } from "./cn";
 
 /**
  * Explanatory tooltip. Content is plain text — these explain protocol concepts
  * (timelocks, why the sweep address is fixed), so they must stay readable
- * against the dark field rather than inheriting a light default.
+ * against whatever surface the consuming app provides.
  */
 export function Tooltip({
     content,
@@ -32,12 +32,12 @@ export function Tooltip({
                         align={align}
                         sideOffset={6}
                         className={cn(
-                            "z-50 max-w-xs rounded-[var(--radius)] border border-line bg-panel-2 px-3 py-1.5 text-xs text-ink shadow-lg",
+                            "z-50 max-w-xs rounded-[var(--radius-exit)] border border-exit-line bg-exit-panel-2 px-3 py-1.5 text-xs text-exit-ink shadow-lg",
                             className,
                         )}
                     >
                         {content}
-                        <TooltipPrimitive.Arrow className="fill-panel-2" />
+                        <TooltipPrimitive.Arrow className="fill-exit-panel-2" />
                     </TooltipPrimitive.Content>
                 </TooltipPrimitive.Portal>
             </TooltipPrimitive.Root>

@@ -24,10 +24,26 @@
         "lint": "prettier --check src test"
     },
     "peerDependencies": {
-        "@arkade-os/sdk": ">=0.4.45"
+        "@arkade-os/sdk": ">=0.4.45",
+        "lucide-react": ">=0.469.0",
+        "react": ">=19.0.0",
+        "react-dom": ">=19.0.0"
+    },
+    "dependencies": {
+        "@radix-ui/react-progress": "^1.1.2",
+        "@radix-ui/react-slot": "^1.1.2",
+        "@radix-ui/react-tooltip": "^1.2.16",
+        "class-variance-authority": "^0.7.1",
+        "clsx": "^2.1.1",
+        "tailwind-merge": "^2.6.0"
     },
     "devDependencies": {
         "@arkade-os/sdk": "0.4.45",
+        "@types/react": "^19.0.0",
+        "@types/react-dom": "^19.0.0",
+        "lucide-react": "^0.469.0",
+        "react": "^19.0.0",
+        "react-dom": "^19.0.0",
         "tsup": "^8.5.0",
         "typescript": "^5.9.0",
         "vitest": "^3.0.0"

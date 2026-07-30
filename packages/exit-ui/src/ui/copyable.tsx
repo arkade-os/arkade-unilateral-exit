@@ -1,6 +1,13 @@
 import { Check, Copy } from "lucide-react";
 import { useState, type ReactNode } from "react";
-import { cn, truncateMiddle } from "@/lib/utils";
+import { cn } from "./cn";
+import { MONO } from "./mono";
+
+/** Short middle-truncation for txids / addresses, e.g. `a1b2…9f0e`. */
+export function truncateMiddle(s: string, head = 8, tail = 6): string {
+    if (s.length <= head + tail + 1) return s;
+    return `${s.slice(0, head)}…${s.slice(-tail)}`;
+}
 
 export function CopyableHash({
     value,
@@ -32,14 +39,14 @@ export function CopyableHash({
                 setTimeout(() => setCopied(false), 1200);
             }}
             className={cn(
-                "group inline-flex items-center gap-1.5 text-xs text-ink-dim hover:text-ink transition-colors",
-                !copyOnly && "tabular",
+                "group inline-flex items-center gap-1.5 text-xs text-exit-ink-dim transition-colors hover:text-exit-ink",
+                !copyOnly && MONO,
                 className,
             )}
         >
             <span>{copyOnly ? (label ?? "Copy") : truncateMiddle(value, head, tail)}</span>
             {copied ? (
-                <Check className="size-3 text-ok" />
+                <Check className="size-3 text-exit-ok" />
             ) : (
                 <Copy className={cn("size-3", !copyOnly && "opacity-0 group-hover:opacity-100")} />
             )}

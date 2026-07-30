@@ -7,19 +7,22 @@ import {
 import { CheckCircle2, CircleAlert, Loader2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import {
+    Card,
+    CardContent,
+    CardHeader,
+    CardTitle,
+    CopyableHash,
     KIND_LABEL,
+    PHASE_STYLE,
+    Progress,
+    cn,
     loadOrCreateFeeKey,
     makeFeeWallet,
     phaseFor,
     type FeeWalletHandle,
     type StepPhase,
 } from "@arkade-os/exit-ui";
-import { PHASE_STYLE } from "@/components/stepMeta";
-import { CopyableHash } from "@/components/CopyableHash";
 import { FundingGate } from "@/components/FundingGate";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
-import { cn } from "@/lib/utils";
 
 type RunPhase = "funding" | "running";
 

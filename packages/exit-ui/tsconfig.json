@@ -6,6 +6,7 @@
         "moduleResolution": "bundler",
         "verbatimModuleSyntax": true,
         "moduleDetection": "force",
+        "jsx": "react-jsx",
         "skipLibCheck": true,
         "noEmit": true,
         "strict": true,

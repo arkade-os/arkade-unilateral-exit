@@ -1,12 +1,19 @@
 import type { ExitPackage } from "@arkade-os/sdk";
 import { Check, CircleAlert, Copy, Download, RefreshCw, Wallet } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { encodeExitBundle, resetFeeKey, type FeeWalletHandle } from "@arkade-os/exit-ui";
+import {
+    Button,
+    Card,
+    CardContent,
+    CardHeader,
+    CardTitle,
+    CopyableHash,
+    Progress,
+    encodeExitBundle,
+    resetFeeKey,
+    type FeeWalletHandle,
+} from "@arkade-os/exit-ui";
 import { formatSats } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
-import { CopyableHash } from "@/components/CopyableHash";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
 
 function downloadText(filename: string, text: string) {
     const url = URL.createObjectURL(new Blob([text], { type: "application/json" }));

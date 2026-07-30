@@ -1,19 +1,23 @@
 import { Slot } from "@radix-ui/react-slot";
 import { cva, type VariantProps } from "class-variance-authority";
 import * as React from "react";
-import { cn } from "@/lib/utils";
+import { cn } from "./cn";
 
 const buttonVariants = cva(
-    "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-[var(--radius)] text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal/60 disabled:pointer-events-none disabled:opacity-40 [&_svg]:size-4 [&_svg]:shrink-0",
+    "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-[var(--radius-exit)] text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-exit-signal/60 disabled:pointer-events-none disabled:opacity-40 [&_svg]:size-4 [&_svg]:shrink-0",
     {
         variants: {
             variant: {
+                // The hairline ring is derived from the accent via color-mix so it
+                // follows the consuming app's palette. It was previously a
+                // hardcoded rgba() of this app's amber, which would have rendered
+                // an amber ring on any other theme.
                 default:
-                    "bg-signal text-signal-ink hover:bg-signal/90 font-semibold shadow-[0_0_0_1px_rgba(232,179,57,0.25)]",
+                    "bg-exit-signal text-exit-signal-ink hover:bg-exit-signal/90 font-semibold shadow-[0_0_0_1px_color-mix(in_oklab,var(--color-exit-signal)_25%,transparent)]",
                 outline:
-                    "border border-line bg-transparent text-ink hover:bg-panel-2 hover:border-ink-faint",
-                ghost: "text-ink-dim hover:bg-panel-2 hover:text-ink",
-                danger: "border border-dead/40 text-dead hover:bg-dead/10",
+                    "border border-exit-line bg-transparent text-exit-ink hover:bg-exit-panel-2 hover:border-exit-ink-faint",
+                ghost: "text-exit-ink-dim hover:bg-exit-panel-2 hover:text-exit-ink",
+                danger: "border border-exit-dead/40 text-exit-dead hover:bg-exit-dead/10",
             },
             size: {
                 default: "h-10 px-4 py-2",

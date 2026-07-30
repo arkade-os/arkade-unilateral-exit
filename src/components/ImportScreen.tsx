@@ -1,13 +1,14 @@
 import { FileUp, ShieldAlert } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import {
+    Button,
+    Card,
+    CardContent,
     decodePackageBlob,
     packageParamFromUrl,
     readFileText,
     type LoadedPackage,
 } from "@arkade-os/exit-ui";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 
 export function ImportScreen({ onImport }: { onImport: (loaded: LoadedPackage) => void }) {
     const [error, setError] = useState<string | null>(null);

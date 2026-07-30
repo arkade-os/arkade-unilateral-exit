@@ -1,5 +1,10 @@
 @import "tailwindcss";
 
+/* Tailwind does not scan workspace packages unless told to. Without this, every
+   class inside @arkade-os/exit-ui compiles to nothing and its components render
+   unstyled — which no typecheck, test or build would catch. */
+@source "../packages/exit-ui/src";
+
 /*
  * "Operator console" design system. Deliberately NOT the shadcn violet
  * default: a near-black slate field, warm off-white text, one restrained
@@ -28,6 +33,27 @@
     --color-dead: #e06a6a;
 
     --radius: 0.5rem;
+
+    /*
+     * The @arkade-os/exit-ui theming contract. The package styles itself against
+     * these names only, so mapping them onto this app's palette is all it takes
+     * for its components to wear the operator-console look. The explorer will
+     * map the same names onto its own tokens.
+     */
+    --color-exit-field: var(--color-field);
+    --color-exit-panel: var(--color-panel);
+    --color-exit-panel-2: var(--color-panel-2);
+    --color-exit-line: var(--color-line);
+    --color-exit-ink: var(--color-ink);
+    --color-exit-ink-dim: var(--color-ink-dim);
+    --color-exit-ink-faint: var(--color-ink-faint);
+    --color-exit-signal: var(--color-signal);
+    --color-exit-signal-ink: var(--color-signal-ink);
+    --color-exit-ok: var(--color-ok);
+    --color-exit-flight: var(--color-flight);
+    --color-exit-wait: var(--color-wait);
+    --color-exit-dead: var(--color-dead);
+    --radius-exit: var(--radius);
 }
 
 html {

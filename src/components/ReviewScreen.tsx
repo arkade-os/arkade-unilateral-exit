@@ -1,11 +1,18 @@
 import type { ExitDelay, ExitPackage, ExitVtxoInfo } from "@arkade-os/sdk";
 import { AlertTriangle, ArrowRight, ChevronDown, Clock, Eye, Info, Lock } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
-import { esploraUrlFor } from "@arkade-os/exit-ui";
-import { btc, cn, formatSats, truncateMiddle } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tooltip } from "@/components/ui/tooltip";
+import {
+    Button,
+    Card,
+    CardContent,
+    CardHeader,
+    CardTitle,
+    Tooltip,
+    cn,
+    esploraUrlFor,
+    truncateMiddle,
+} from "@arkade-os/exit-ui";
+import { btc, formatSats } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
 // Derivations
