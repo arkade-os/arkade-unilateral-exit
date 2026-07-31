@@ -6,9 +6,17 @@ name: Release @arkade-os/exit-ui
 #   "@arkade-os/exit-ui":
 #     "https://github.com/arkade-os/arkade-unilateral-exit/releases/download/exit-ui-v0.1.0/arkade-os-exit-ui-0.1.0.tgz"
 #
-# pnpm records an integrity hash for a bare tarball URL, so consumers still get
-# tamper detection. GitHub Packages was rejected deliberately: its npm registry
-# requires an authenticated token even to read public packages, which would mean
+# Two independent guarantees, covering different threats:
+#
+#   1. pnpm records an integrity hash for the tarball URL in the consumer's
+#      lockfile — the bytes cannot change under a fixed pin.
+#   2. The job attests build provenance to Sigstore, so the bytes can be proven
+#      to be the ones CI built from this repo. The hash alone cannot show that:
+#      a release asset is mutable, and whoever replaced one could update the
+#      lockfile hash in the same commit.
+#
+# GitHub Packages was rejected deliberately: its npm registry requires an
+# authenticated token even to read public packages, which would mean
 # provisioning and rotating a token in each of the explorer's Cloudflare Pages
 # projects just to install.
 #
@@ -26,6 +34,11 @@ on:
 
 permissions:
     contents: write
+    # For build provenance. `id-token` mints the short-lived OIDC token Sigstore
+    # exchanges for a signing certificate; `attestations` writes the resulting
+    # attestation. Both are scoped to this workflow only.
+    id-token: write
+    attestations: write
 
 jobs:
     release:
@@ -119,6 +132,27 @@ jobs:
                   cp "$GITHUB_WORKSPACE/scripts/smoke-tarball.mjs" ./smoke.mjs
                   node ./smoke.mjs
 
+            # Signs the tarball's digest with a short-lived Sigstore certificate and
+            # records it in the public Rekor transparency log, binding these exact
+            # bytes to this repo, this workflow and this commit.
+            #
+            # This is what closes the gap a lockfile hash cannot. A release asset is
+            # mutable: anyone with write access can delete and re-upload one, and
+            # update the consumer's lockfile hash in the same commit — the hash
+            # attests that the bytes did not change in transit, not that they are
+            # the bytes CI built. Provenance cannot be forged that way, because the
+            # signing identity is the workflow itself and the log is append-only and
+            # public. A substituted asset simply has no valid attestation.
+            #
+            # Verify before trusting an upgrade:
+            #   gh attestation verify arkade-os-exit-ui-<version>.tgz \
+            #       --repo arkade-os/arkade-unilateral-exit
+            - name: Attest build provenance
+              if: startsWith(github.ref, 'refs/tags/')
+              uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
+              with:
+                  subject-path: ${{ github.workspace }}/${{ steps.pack.outputs.tarball }}
+
             - name: Create the release
               if: startsWith(github.ref, 'refs/tags/')
               env:
@@ -135,4 +169,13 @@ jobs:
                   Consumers must also add \`@source\` for the package's built output so Tailwind emits its classes:
                   \`\`\`
                   @source \"../node_modules/@arkade-os/exit-ui/dist\";
-                  \`\`\`"
+                  \`\`\`
+
+                  ### Verifying this asset
+
+                  This tarball has signed build provenance. Before adopting it, confirm these exact bytes were built by CI from this repository:
+                  \`\`\`
+                  gh release download $GITHUB_REF_NAME --repo ${{ github.repository }} --pattern '*.tgz'
+                  gh attestation verify ${{ steps.pack.outputs.tarball }} --repo ${{ github.repository }}
+                  \`\`\`
+                  Your lockfile's integrity hash proves the bytes never changed under a fixed pin; the attestation proves they are the ones CI produced. A release asset is mutable, so both matter."

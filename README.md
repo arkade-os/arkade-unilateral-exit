@@ -187,10 +187,33 @@ Consumers install by URL, with no registry involved:
 }
 ```
 
-pnpm records an integrity hash for a bare tarball URL in the lockfile, so consumers still get tamper
-detection. Note that release assets are mutable in principle — anyone with write access can delete
-and re-upload one — so the lockfile hash is what actually pins the contents. Never re-upload an asset
-under an existing tag; cut a new version instead.
+### Verifying a release
+
+Two mechanisms cover two different threats, and neither replaces the other.
+
+**The lockfile integrity hash** — pnpm records a sha512 of the tarball for the URL. Under a fixed
+pin the bytes cannot change without a hash mismatch, so this covers tampering in transit and a
+swapped asset on a later install.
+
+**Build provenance** — the release workflow signs the tarball's digest via Sigstore and records it in
+the public Rekor transparency log, binding those exact bytes to this repository, workflow and commit.
+Verify before adopting a version:
+
+```bash
+TAG=exit-ui-v<version>
+gh release download "$TAG" --repo arkade-os/arkade-unilateral-exit --pattern '*.tgz'
+gh attestation verify arkade-os-exit-ui-<version>.tgz --repo arkade-os/arkade-unilateral-exit
+```
+
+The distinction matters because a **release asset is mutable**: anyone with write access can delete
+and re-upload one, and could update a consumer's lockfile hash in the same commit. The hash alone
+attests that the bytes did not change, not that they are the bytes CI built. Provenance cannot be
+forged that way — the signing identity is the workflow itself, and the log is append-only and
+public, so a substituted asset simply has no valid attestation.
+
+**`exit-ui-v0.1.0` has no attestation** — it was cut before this step existed, so `gh attestation
+verify` will fail against it and that is expected, not a tampering signal. Every release after it
+carries one. Still never re-upload an asset under an existing tag; cut a new version instead.
 
 ### Why the tarball is smoke-tested before it ships
 
