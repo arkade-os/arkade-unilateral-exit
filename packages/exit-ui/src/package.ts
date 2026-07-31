@@ -43,12 +43,27 @@ const BUNDLE_MARKER = "arkadeExitBundle";
 export const FEE_KEY_RE = /^[0-9a-f]{64}$/;
 
 /**
- * The SDK's `deserializeExitPackage` validates `steps` but NOT `totals` or the
- * fields inside `vtxos[]` — it casts the rest. The screens dereference those
- * unconditionally (`pkg.totals.txCount`, `truncateMiddle(v.outpoint)`), so a
- * hostile or truncated package that clears the SDK check would crash the render
- * (a blank page) reachable from a bare `?pkg=` link. Validate them here so the
- * failure surfaces through the import error path instead.
+ * Render-safety validation, on top of the SDK's own.
+ *
+ * The screens dereference these fields unconditionally
+ * (`pkg.totals.txCount`, `truncateMiddle(v.outpoint)`), so a hostile or
+ * truncated package that clears `deserializeExitPackage` would crash the render
+ * — a blank page, reachable from a bare `?pkg=` link. This makes the failure
+ * surface through the import error path instead.
+ *
+ * Measured against `@arkade-os/sdk` 0.4.53, the split is:
+ *
+ * - **`vtxos[]` — load-bearing.** The SDK accepts a numeric `outpoint`, a
+ *   string `value`, a vtxo with no `outpoint` at all, and an empty `vtxos`
+ *   array. Only these checks stand between such a package and the render.
+ * - **`totals` — defensive depth.** The SDK already rejects a missing `totals`
+ *   and a non-numeric value in any of the four fields, so in practice it fails
+ *   first and this branch never fires. Kept deliberately: the guarantee belongs
+ *   to a dependency we do not control, and the cost of keeping it is one
+ *   comparison per import.
+ *
+ * Both throw messages contain "totals", so a test asserting `/totals/i` passes
+ * whichever layer rejects — do not read such a test as proof this branch ran.
  */
 function assertRenderable(pkg: ExitPackage): void {
     const totals = pkg.totals as unknown as Record<string, unknown> | null | undefined;

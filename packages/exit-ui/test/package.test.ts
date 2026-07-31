@@ -58,8 +58,16 @@ describe("decodePackageBlob", () => {
 });
 
 describe("decodePackageBlob rejects render-crashing packages", () => {
-    // These clear the SDK's deserializeExitPackage checks (valid version/steps)
-    // but would throw during render — they must be rejected at decode instead.
+    // Each of these would crash the render if it reached a screen, so decode has
+    // to refuse it. They do not all fail at the same layer, though, and the
+    // assertions here deliberately do not care which one rejects — only that the
+    // package never gets through:
+    //
+    //   totals  -> the SDK rejects these first; assertRenderable is depth behind it
+    //   vtxos   -> the SDK accepts them, so assertRenderable is the only guard
+    //
+    // Both layers' totals messages contain "totals", so `/totals/i` matching here
+    // is not evidence that assertRenderable ran. See its JSDoc.
     it("rejects a package with no totals", async () => {
         const noTotals: Record<string, unknown> = { ...pkg };
         delete noTotals.totals;
