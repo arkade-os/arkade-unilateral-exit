@@ -71,10 +71,15 @@ function assertRenderable(pkg: ExitPackage): void {
  * (envelope with an embedded fee key) or a bare SDK exit package. Either way the
  * package itself is validated by the SDK — the single source of truth.
  *
- * Exposed separately from {@link parsePackageJson} so callers holding a parsed
- * object (the session store) do not have to re-serialize and re-parse it. A
- * package carries full transaction hex for every step, so that round-trip
- * materializes every hex string an extra time on each page load.
+ * Exposed separately from {@link parsePackageJson} so a caller already holding a
+ * parsed object — the session store, on every page load — can skip the
+ * stringify-then-parse round trip at the boundary. A package carries full
+ * transaction hex for every step, so that round trip materializes every hex
+ * string twice more than necessary.
+ *
+ * Note this does NOT avoid serialization altogether: `deserializeExitPackage` is
+ * the SDK's validator and takes a string, so one `JSON.stringify` still happens
+ * below. The saving is one stringify plus one parse, not all of them.
  */
 export function parsePackageObject(obj: unknown): LoadedPackage {
     if (obj && typeof obj === "object" && BUNDLE_MARKER in obj) {

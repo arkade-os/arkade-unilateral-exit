@@ -164,6 +164,12 @@ Packages was considered and rejected: its npm registry requires an authenticated
 a public package, which would mean provisioning and rotating a token in every consumer's build
 environment just to run `install`.
 
+`packages/exit-ui/package.json` therefore keeps **`"private": true` deliberately**. It is not a
+leftover: it is the guard that makes an accidental `npm publish` fail, which is the correct posture
+for a package whose distribution channel is not a registry. It does not affect consumers — pnpm
+ignores it when installing a direct tarball URL, and `pnpm pack` honours it fine — so it ships
+inside the tarball and can look like a mistake to anyone reading it there. It isn't.
+
 Cutting a release is an explicit act — bump the version, tag it, push the tag:
 
 ```bash
