@@ -1,0 +1,133 @@
+name: Release @arkade-os/exit-ui
+
+# Publishes the package as a GitHub Release asset — a plain, public tarball URL
+# that any consumer can install with no registry and no authentication:
+#
+#   "@arkade-os/exit-ui":
+#     "https://github.com/arkade-os/arkade-unilateral-exit/releases/download/exit-ui-v0.1.0/arkade-os-exit-ui-0.1.0.tgz"
+#
+# pnpm records an integrity hash for a bare tarball URL, so consumers still get
+# tamper detection. GitHub Packages was rejected deliberately: its npm registry
+# requires an authenticated token even to read public packages, which would mean
+# provisioning and rotating a token in each of the explorer's Cloudflare Pages
+# projects just to install.
+#
+# Fires only on an `exit-ui-v*` tag, so cutting a release is an explicit act:
+#   git tag exit-ui-v0.1.0 && git push origin exit-ui-v0.1.0
+
+on:
+    push:
+        tags:
+            - "exit-ui-v*"
+    # Manual runs build, pack and smoke-test but never release: the release step
+    # is guarded on a tag ref. That makes this safe to run against master to
+    # check the pipeline itself still works.
+    workflow_dispatch:
+
+permissions:
+    contents: write
+
+jobs:
+    release:
+        name: Build, pack & publish
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+
+            - uses: pnpm/action-setup@v4
+              with:
+                  version: 10.25.0
+
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 24
+                  cache: pnpm
+
+            - run: pnpm install --frozen-lockfile
+
+            # The full gate before anything ships. A release asset is immutable
+            # once consumers pin it, so it must not be built from a red tree.
+            - name: Format check
+              run: pnpm run lint
+
+            - name: Typecheck
+              run: pnpm run typecheck
+
+            - name: Unit tests
+              run: pnpm test
+
+            - name: Build the package
+              run: pnpm --filter @arkade-os/exit-ui build
+
+            # The tag is the source of truth for the version; a mismatch with
+            # package.json would publish an asset whose name lies about what is
+            # inside it.
+            - name: Check the tag matches package.json
+              if: startsWith(github.ref, 'refs/tags/')
+              run: |
+                  TAG_VERSION="${GITHUB_REF_NAME#exit-ui-v}"
+                  PKG_VERSION=$(node -p "require('./packages/exit-ui/package.json').version")
+                  echo "tag=$TAG_VERSION package.json=$PKG_VERSION"
+                  if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
+                      echo "::error::Tag exit-ui-v$TAG_VERSION does not match package.json version $PKG_VERSION"
+                      exit 1
+                  fi
+
+            - name: Pack
+              id: pack
+              run: |
+                  # Glob for the artifact rather than parsing `pnpm pack` stdout:
+                  # the command prints a human-readable header before the path and
+                  # that format is not a stable contract across pnpm versions.
+                  cd packages/exit-ui
+                  pnpm pack --pack-destination "$GITHUB_WORKSPACE"
+                  cd "$GITHUB_WORKSPACE"
+                  COUNT=$(ls -1 ./*.tgz 2>/dev/null | wc -l)
+                  if [ "$COUNT" -ne 1 ]; then
+                      echo "::error::expected exactly one tarball, found $COUNT"
+                      ls -la ./*.tgz || true
+                      exit 1
+                  fi
+                  TARBALL=$(basename "$(ls -1 ./*.tgz)")
+                  echo "tarball=$TARBALL" >> "$GITHUB_OUTPUT"
+                  echo "packed $TARBALL"
+
+            # Proves the artifact is usable before it is published, rather than
+            # after a consumer reports that it is not: install the tarball into a
+            # scratch project outside the workspace and import the public surface.
+            - name: Smoke-test the tarball as an external consumer
+              run: |
+                  mkdir -p /tmp/consumer && cd /tmp/consumer
+                  cp "$GITHUB_WORKSPACE/${{ steps.pack.outputs.tarball }}" ./exit-ui.tgz
+                  cat > package.json <<'JSON'
+                  {
+                    "name": "release-smoke", "private": true, "type": "module",
+                    "dependencies": {
+                      "@arkade-os/exit-ui": "file:./exit-ui.tgz",
+                      "@arkade-os/sdk": ">=0.4.45",
+                      "react": ">=19.0.0", "react-dom": ">=19.0.0",
+                      "lucide-react": ">=0.469.0"
+                    }
+                  }
+                  JSON
+                  pnpm install --no-frozen-lockfile
+                  cp "$GITHUB_WORKSPACE/scripts/smoke-tarball.mjs" ./smoke.mjs
+                  node ./smoke.mjs
+
+            - name: Create the release
+              if: startsWith(github.ref, 'refs/tags/')
+              env:
+                  GH_TOKEN: ${{ github.token }}
+              run: |
+                  gh release create "$GITHUB_REF_NAME" \
+                      "$GITHUB_WORKSPACE/${{ steps.pack.outputs.tarball }}" \
+                      --title "$GITHUB_REF_NAME" \
+                      --notes "Install:
+                  \`\`\`
+                  \"@arkade-os/exit-ui\": \"https://github.com/${{ github.repository }}/releases/download/$GITHUB_REF_NAME/${{ steps.pack.outputs.tarball }}\"
+                  \`\`\`
+                  Requires peers: \`@arkade-os/sdk\`, \`react\`, \`react-dom\`, \`lucide-react\`.
+                  Consumers must also add \`@source\` for the package's built output so Tailwind emits its classes:
+                  \`\`\`
+                  @source \"../node_modules/@arkade-os/exit-ui/dist\";
+                  \`\`\`"

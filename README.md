@@ -57,17 +57,33 @@ A pnpm workspace. The app lives at the root; shared logic lives in a package bes
 
 ```
 package.json          the app (private) — Vite + React, deploys to Pages
-src/                  app code: screens, shell, presentation
-packages/exit-ui/     @arkade-os/exit-ui — framework-free exit logic
+src/                  page chrome only: masthead, footer, mount
+packages/exit-ui/     @arkade-os/exit-ui — the exit feature itself
 ```
 
-`@arkade-os/exit-ui` holds everything that isn't presentation: package decoding and the
-self-executable bundle envelope, session persistence, ephemeral fee-wallet construction, Esplora
-endpoint resolution, and the executor step-phase mapping. It has no React and no Tailwind, and takes
-`@arkade-os/sdk` as a peer dependency so a consumer never ends up with two copies of the SDK.
+`@arkade-os/exit-ui` holds the whole feature: package decoding and the self-executable bundle
+envelope, session persistence, ephemeral fee-wallet construction, Esplora endpoint resolution, the
+executor step-phase mapping, and the screens that drive them — import, review, funding gate and
+execute — behind a single `<ExitFlow />`. `src/` is 60 lines of chrome around it.
 
-The app consumes it as `"@arkade-os/exit-ui": "workspace:*"`, so there is nothing to publish or
-install — but the package must be **built before** the app typechecks or builds, because the app
+It takes `@arkade-os/sdk`, `react`, `react-dom` and `lucide-react` as **peer** dependencies, so a
+consumer never ends up with two copies of the SDK or of React (two Reacts breaks hooks at runtime
+with an error that points nowhere near the cause).
+
+It renders against a **token contract** rather than a fixed palette. The package styles itself with
+`--color-exit-*` and `--radius-exit` custom properties, and each host maps those onto its own theme,
+so this app and the explorer share behaviour while keeping their distinct looks. A host must
+therefore declare those tokens **and** point Tailwind at the package's built output, which Tailwind
+does not scan by default:
+
+```css
+@source "../node_modules/@arkade-os/exit-ui/dist";
+```
+
+Skip the `@source` line and the app compiles, renders, and comes out unstyled.
+
+The app consumes it as `"@arkade-os/exit-ui": "workspace:*"`, so local development needs nothing
+published — but the package must be **built before** the app typechecks or builds, because the app
 imports its compiled output. The root `dev`, `build` and `typecheck` scripts do that for you; don't
 run `tsc` or `vite` directly without building the package first.
 
@@ -139,6 +155,55 @@ is the only entry point.
 
 For a custom domain, build with `BASE_PATH=/` and add a `CNAME` file containing the domain to
 `dist/` (or to the repository, if you keep using the Pages workflow).
+
+## Releasing `@arkade-os/exit-ui`
+
+The package is published as a **GitHub Release asset**, not to npm. A release asset is a plain
+public tarball URL that installs with no registry configuration and no authentication. GitHub
+Packages was considered and rejected: its npm registry requires an authenticated token even to read
+a public package, which would mean provisioning and rotating a token in every consumer's build
+environment just to run `install`.
+
+Cutting a release is an explicit act — bump the version, tag it, push the tag:
+
+```bash
+# 1. bump packages/exit-ui/package.json "version"
+# 2. commit that on master
+git tag exit-ui-v0.1.0
+git push origin exit-ui-v0.1.0
+```
+
+`.github/workflows/release-exit-ui.yml` then runs lint, typecheck, tests and the build, checks the
+tag matches `package.json` (a mismatch fails the run rather than publishing an asset whose filename
+lies about its contents), packs the tarball, smoke-tests it, and creates the release.
+
+Consumers install by URL, with no registry involved:
+
+```json
+{
+    "dependencies": {
+        "@arkade-os/exit-ui": "https://github.com/arkade-os/arkade-unilateral-exit/releases/download/exit-ui-v0.1.0/arkade-os-exit-ui-0.1.0.tgz"
+    }
+}
+```
+
+pnpm records an integrity hash for a bare tarball URL in the lockfile, so consumers still get tamper
+detection. Note that release assets are mutable in principle — anyone with write access can delete
+and re-upload one — so the lockfile hash is what actually pins the contents. Never re-upload an asset
+under an existing tag; cut a new version instead.
+
+### Why the tarball is smoke-tested before it ships
+
+`scripts/smoke-tarball.mjs` installs the packed tarball into a scratch project **outside** the
+workspace and imports only the public surface. This catches a class of bug that no in-repo gate can:
+inside the workspace the package's own screens import each other by relative path, and `src/App.tsx`
+uses only `ExitFlow` — so a helper can be written, used, unit-tested and built while never being
+exported from `index.ts`. Typecheck, tests, build and lint all stay green and the package is still
+broken for everyone outside it.
+
+That is not hypothetical: three exports were missing exactly this way, and only packing and
+installing elsewhere found them. `packages/exit-ui/test/publicApi.test.ts` now pins the full surface
+in both directions, and the smoke test independently verifies the built artifact.
 
 ## License
 
