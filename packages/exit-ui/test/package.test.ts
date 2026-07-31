@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { decodePackageBlob, encodeExitBundle, packageParamFromUrl } from "../src/package";
+import {
+    decodePackageBlob,
+    encodeExitBundle,
+    packageParamFromUrl,
+    parsePackageObject,
+} from "../src/package";
 import type { ExitPackage } from "@arkade-os/sdk";
 
 const pkg: ExitPackage = {
@@ -94,6 +99,57 @@ describe("encodeExitBundle / decodePackageBlob round-trip", () => {
     it("drops a malformed fee key rather than embedding it", async () => {
         const blob = encodeExitBundle(pkg, "not-a-key");
         expect(await decodePackageBlob(blob)).toEqual({ pkg });
+    });
+});
+
+/**
+ * The session store calls `parsePackageObject` directly on every page load —
+ * that path is the whole reason the function is exported separately. Until now
+ * it was only ever reached through `decodePackageBlob → parsePackageJson`, so
+ * the entry point a restored session actually uses had no test of its own, and
+ * a regression reachable only from storage would have gone unnoticed.
+ */
+describe("parsePackageObject (the session-restore entry point)", () => {
+    const feeKeyHex = "ab".repeat(32);
+
+    it("accepts an already-parsed bare package", () => {
+        expect(parsePackageObject(structuredClone(pkg))).toEqual({ pkg });
+    });
+
+    it("accepts an already-parsed bundle envelope and recovers the fee key", () => {
+        const envelope = { arkadeExitBundle: 1, pkg: structuredClone(pkg), feeKeyHex };
+        expect(parsePackageObject(envelope)).toEqual({ pkg, feeKeyHex });
+    });
+
+    // A stored envelope is untrusted input: localStorage is writable by anything
+    // running on the origin. A malformed key must be dropped, not handed to the
+    // fee wallet, where it would fail somewhere far less legible.
+    it("drops a malformed fee key from a stored envelope", () => {
+        const envelope = { arkadeExitBundle: 1, pkg: structuredClone(pkg), feeKeyHex: "nope" };
+        expect(parsePackageObject(envelope)).toEqual({ pkg });
+    });
+
+    it("drops a non-string fee key from a stored envelope", () => {
+        const envelope = { arkadeExitBundle: 1, pkg: structuredClone(pkg), feeKeyHex: 42 };
+        expect(parsePackageObject(envelope)).toEqual({ pkg });
+    });
+
+    // assertRenderable has to fire from this entry point too, not just from the
+    // decode path — otherwise a package that would crash the render could reach
+    // the screens via a restored session while being rejected on fresh import.
+    it("rejects malformed totals from the object entry point", () => {
+        const bad = { ...structuredClone(pkg), totals: { ...pkg.totals, txCount: "lots" } };
+        expect(() => parsePackageObject(bad)).toThrow(/totals/i);
+    });
+
+    it("rejects a vtxo with a non-string outpoint from the object entry point", () => {
+        const bad = { ...structuredClone(pkg), vtxos: [{ outpoint: 123, value: 1000 }] };
+        expect(() => parsePackageObject(bad)).toThrow(/outpoint/i);
+    });
+
+    it("rejects an unknown version from the object entry point", () => {
+        const bad = { ...structuredClone(pkg), version: 2 };
+        expect(() => parsePackageObject(bad)).toThrow(/version/i);
     });
 });
 
