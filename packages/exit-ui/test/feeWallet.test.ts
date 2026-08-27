@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { loadOrCreateFeeKey, resetFeeKey } from "../src/feeWallet";
+import { loadOrCreateFeeKey, resetFeeKey, splitBalances } from "../src/feeWallet";
 import type { SessionStore } from "../src/session";
+
+const coin = (value: number, confirmed: boolean) => ({ value, status: { confirmed } });
 
 const KEY = "arkade-exit:fee-key";
 const HEX64 = /^[0-9a-f]{64}$/;
@@ -65,6 +67,37 @@ describe("loadOrCreateFeeKey", () => {
 
     it("returns a usable key when there is no store at all", () => {
         expect(loadOrCreateFeeKey(null)).toMatch(HEX64);
+    });
+});
+
+describe("splitBalances", () => {
+    it("totals confirmed and mempool coins separately", () => {
+        expect(splitBalances([coin(556, true), coin(2000, false), coin(10, true)])).toEqual({
+            confirmed: 566,
+            pending: 2000,
+        });
+    });
+
+    it("is zero for an empty wallet", () => {
+        expect(splitBalances([])).toEqual({ confirmed: 0, pending: 0 });
+    });
+
+    /**
+     * The gap this exists to close. A user deposited 2000 sats, the transaction
+     * sat unconfirmed, and the gate showed "556 / 1102" with no mention of it —
+     * indistinguishable from the deposit never arriving.
+     *
+     * The gate must keep gating on `confirmed`, because `bumpAnchor` itself does
+     * `getCoins().filter(c => c.status.confirmed)` — letting unconfirmed funds
+     * open the gate would just move the failure into the executor. But it has to
+     * *say* the money was seen.
+     */
+    it("keeps an unconfirmed deposit out of the spendable total but still reports it", () => {
+        const b = splitBalances([coin(556, true), coin(2000, false)]);
+        expect(b.confirmed).toBe(556);
+        expect(b.confirmed >= 1102).toBe(false);
+        expect(b.pending).toBe(2000);
+        expect(b.confirmed + b.pending >= 1102).toBe(true);
     });
 });
 

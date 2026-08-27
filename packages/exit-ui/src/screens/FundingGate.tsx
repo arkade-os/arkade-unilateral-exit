@@ -1,5 +1,5 @@
 import type { ExitPackage } from "@arkade-os/sdk";
-import { Check, CircleAlert, Copy, Download, RefreshCw, Wallet } from "lucide-react";
+import { Check, CircleAlert, Copy, Download, Loader2, RefreshCw, Wallet } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import {
     Button,
@@ -11,6 +11,7 @@ import {
     Progress,
     encodeExitBundle,
     resetFeeKey,
+    type FeeBalances,
     type FeeWalletHandle,
     type FundingNeed,
 } from "../index";
@@ -54,7 +55,10 @@ export function FundingGate({
      * stranding whatever was deposited to the new one. */
     onRegenerate: (newFeeKeyHex: string) => void;
 }) {
-    const [balance, setBalance] = useState(0);
+    const [{ confirmed: balance, pending }, setBalances] = useState<FeeBalances>({
+        confirmed: 0,
+        pending: 0,
+    });
     const [copied, setCopied] = useState(false);
     const [unreachable, setUnreachable] = useState(false);
 
@@ -63,9 +67,9 @@ export function FundingGate({
         let failures = 0;
         const poll = async () => {
             try {
-                const b = await fee.confirmedBalance();
+                const b = await fee.balances();
                 if (!live) return;
-                setBalance(b);
+                setBalances(b);
                 failures = 0;
                 setUnreachable(false);
             } catch {
@@ -172,6 +176,28 @@ export function FundingGate({
                         value={pct}
                         indicatorClassName={funded ? "bg-exit-ok" : "bg-exit-signal"}
                     />
+                    {/* Without this a deposit sitting in the mempool is invisible
+                        here, which reads exactly like one that never arrived —
+                        and the natural response to that is to send more. */}
+                    {pending > 0 && (
+                        <div className="flex items-start gap-2 text-[11px] text-exit-wait">
+                            <Loader2 className="mt-px size-3 shrink-0 animate-spin" />
+                            <span>
+                                <span className="font-mono tabular-nums tracking-[-0.01em]">
+                                    {formatSats(pending)}
+                                </span>{" "}
+                                seen, waiting to confirm — no need to send more. Fee bumps can only
+                                spend confirmed coins, so this unlocks on its own once it lands in a
+                                block.
+                                {balance + pending >= required && (
+                                    <span className="text-exit-ok">
+                                        {" "}
+                                        That will be enough to proceed.
+                                    </span>
+                                )}
+                            </span>
+                        </div>
+                    )}
                 </div>
 
                 {unreachable && (

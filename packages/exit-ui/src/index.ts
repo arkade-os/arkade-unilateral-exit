@@ -1,5 +1,12 @@
 export { esploraUrlFor } from "./esplora";
-export { loadOrCreateFeeKey, resetFeeKey, makeFeeWallet, type FeeWalletHandle } from "./feeWallet";
+export {
+    loadOrCreateFeeKey,
+    resetFeeKey,
+    makeFeeWallet,
+    splitBalances,
+    type FeeWalletHandle,
+    type FeeBalances,
+} from "./feeWallet";
 export {
     parsePackageJson,
     parsePackageObject,

@@ -63,6 +63,38 @@ export function resetFeeKey(store: SessionStore | null = defaultStore()): string
     return loadOrCreateFeeKey(store);
 }
 
+export interface FeeBalances {
+    /** Spendable now. The only figure the funding gate may act on. */
+    confirmed: number;
+    /** Seen in the mempool but not yet spendable. Reportable, never actionable. */
+    pending: number;
+}
+
+/**
+ * Split coins into what can be spent now and what is merely visible.
+ *
+ * Pure, and tested, because the distinction is the whole point and it is not
+ * cosmetic: `OnchainWallet.bumpAnchor` does
+ * `getCoins().filter(c => c.status.confirmed)` before selecting inputs, so an
+ * unconfirmed deposit genuinely cannot pay a CPFP bump. Letting it open the
+ * funding gate would only move the failure one screen later, into the executor.
+ *
+ * It still has to be reported. A deposit that has landed in the mempool but is
+ * absent from the UI is indistinguishable from one that never arrived, which
+ * leaves the user to guess whether to send more.
+ */
+export function splitBalances(
+    coins: readonly { value: number; status: { confirmed: boolean } }[],
+): FeeBalances {
+    let confirmed = 0;
+    let pending = 0;
+    for (const c of coins) {
+        if (c.status.confirmed) confirmed += c.value;
+        else pending += c.value;
+    }
+    return { confirmed, pending };
+}
+
 export interface FeeWalletHandle {
     /** The onchain address the user must fund. */
     address: string;
@@ -70,6 +102,9 @@ export interface FeeWalletHandle {
     privKeyHex: string;
     /** Confirmed balance in sats. */
     confirmedBalance(): Promise<number>;
+    /** Confirmed and pending balances from a single `getCoins` call — polling
+     * twice a second apart would let them disagree across a confirmation. */
+    balances(): Promise<FeeBalances>;
     /** Passed to `UnilateralExit.Executor` as its {@link ExitFeeWallet}. */
     wallet: OnchainWallet & ExitFeeWallet;
 }
@@ -87,13 +122,14 @@ export async function makeFeeWallet(
     const identity = SingleKey.fromHex(privKeyHex);
     const provider = new EsploraProvider(esploraUrl);
     const wallet = await OnchainWallet.create(identity, network, provider);
+    const balances = async (): Promise<FeeBalances> => splitBalances(await wallet.getCoins());
     return {
         address: wallet.address,
         privKeyHex,
         wallet,
         async confirmedBalance() {
-            const coins = await wallet.getCoins();
-            return coins.filter((c) => c.status.confirmed).reduce((sum, c) => sum + c.value, 0);
+            return (await balances()).confirmed;
         },
+        balances,
     };
 }
