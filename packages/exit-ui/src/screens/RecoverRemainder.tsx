@@ -43,10 +43,12 @@ export function RecoverRemainder({
     const [error, setError] = useState<string | null>(null);
     const [sweptTxid, setSweptTxid] = useState<string | null>(null);
 
-    // Stop polling once swept: the balance is zero from here and the receipt
-    // below is what the user wants left on screen.
+    // Polling continues after a sweep. `OnchainWallet.send` selects its own
+    // inputs, so it can cover the amount from a subset of coins and leave the
+    // rest behind — the quote prices every coin, but nothing forces `send` to
+    // spend every coin. Claiming "empty" without re-reading would be a false
+    // statement about the user's money.
     useEffect(() => {
-        if (sweptTxid) return;
         let live = true;
         const poll = async () => {
             try {
@@ -79,6 +81,9 @@ export function RecoverRemainder({
         [balance, inputCount, destination, network, feeRate],
     );
 
+    // Anything the sweep did not take. Reported rather than asserted away.
+    const leftBehind = sweptTxid && balance !== null ? balance : 0;
+
     if (sweptTxid) {
         return (
             <Card>
@@ -88,8 +93,23 @@ export function RecoverRemainder({
                 </CardHeader>
                 <CardContent className="flex flex-col gap-2">
                     <p className="text-sm text-exit-ink-dim">
-                        Sent to your address. The fee wallet is empty and this exit is finished.
+                        Sent to your address.{" "}
+                        {balance === null
+                            ? "Re-reading the fee wallet balance…"
+                            : leftBehind === 0
+                              ? "The fee wallet is empty and this exit is finished."
+                              : null}
                     </p>
+                    {leftBehind > 0 && (
+                        <p className="text-xs text-exit-wait">
+                            <span className="font-mono tabular-nums tracking-[-0.01em]">
+                                {formatSats(leftBehind)}
+                            </span>{" "}
+                            stayed behind — the wallet picks its own inputs and covered the amount
+                            without spending every coin. Too little to sweep on its own, but the fee
+                            key in your exported bundle still reaches it.
+                        </p>
+                    )}
                     <CopyableHash value={sweptTxid} />
                 </CardContent>
             </Card>
@@ -159,6 +179,10 @@ export function RecoverRemainder({
                         setError(null);
                         try {
                             const { txid } = await fee.sweepAll(destination.trim(), feeRate);
+                            // Drop the pre-sweep figure before showing the
+                            // receipt: kept, it would be read as the amount left
+                            // behind until the next poll lands.
+                            setBalance(null);
                             setSweptTxid(txid);
                         } catch (e) {
                             setError(e instanceof Error ? e.message : String(e));

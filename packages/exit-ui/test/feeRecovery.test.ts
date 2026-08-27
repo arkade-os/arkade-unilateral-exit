@@ -15,6 +15,16 @@ const quote = (over: Partial<Parameters<typeof quoteFeeSweep>[0]> = {}) =>
     });
 
 describe("quoteFeeSweep", () => {
+    // `OnchainWallet.send` floors the rate before selecting coins. Quoting the
+    // raw value would under-state the fee, over-state what survives, and leave
+    // `send` unable to fund the amount the panel promised.
+    it("floors the rate the way send does, so the quote stays fundable", () => {
+        const floored = quote({ feeRate: 1 });
+        expect(quote({ feeRate: 0 })).toEqual(floored);
+        expect(quote({ feeRate: 0.1 })).toEqual(floored);
+        expect(quote({ feeRate: -5 })).toEqual(floored);
+    });
+
     /**
      * The real remainder from a finished mainnet graph exit: two confirmed
      * coins, 2556 sats, nothing left to pay for. The point of the panel is that

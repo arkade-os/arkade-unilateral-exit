@@ -1,4 +1,4 @@
-import { getNetwork, TxWeightEstimator, type NetworkName } from "@arkade-os/sdk";
+import { getNetwork, OnchainWallet, TxWeightEstimator, type NetworkName } from "@arkade-os/sdk";
 
 /** Below this an output is unspendable, so sweeping it would burn it as fee. */
 export const SWEEP_DUST_SATS = 546;
@@ -39,8 +39,12 @@ export function quoteFeeSweep(params: {
     feeRate: number;
     dustSats?: number;
 }): FeeSweepQuote {
-    const { balanceSats, inputCount, destination, network, feeRate } = params;
+    const { balanceSats, inputCount, destination, network } = params;
     const dust = params.dustSats ?? SWEEP_DUST_SATS;
+    // `OnchainWallet.send` raises anything below its floor before selecting
+    // coins, so quoting the raw rate would under-state the fee and over-state
+    // what survives — and `send` would then reject the amount it cannot fund.
+    const feeRate = Math.max(params.feeRate, OnchainWallet.MIN_FEE_RATE);
 
     const est = TxWeightEstimator.create();
     for (let i = 0; i < inputCount; i++) est.addKeySpendInput(true);

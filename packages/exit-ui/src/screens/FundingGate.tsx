@@ -61,6 +61,10 @@ export function FundingGate({
     });
     const [copied, setCopied] = useState(false);
     const [confirmingNewKey, setConfirmingNewKey] = useState(false);
+    // Whether the figures below reflect a real read. They start at zero and stay
+    // there when polling fails, so "no balance" and "no answer yet" are the same
+    // value — and the discard guard must not read the second as the first.
+    const [balanceKnown, setBalanceKnown] = useState(false);
     const [unreachable, setUnreachable] = useState(false);
 
     useEffect(() => {
@@ -71,6 +75,7 @@ export function FundingGate({
                 const b = await fee.balances();
                 if (!live) return;
                 setBalances(b);
+                setBalanceKnown(true);
                 failures = 0;
                 setUnreachable(false);
             } catch {
@@ -79,7 +84,10 @@ export function FundingGate({
                 // indistinguishable from "deposit not seen yet" and the user waits
                 // forever (or re-sends fees).
                 failures += 1;
-                if (live && failures >= 3) setUnreachable(true);
+                if (!live) return;
+                // Not merely cosmetic: an unknown balance must gate the discard.
+                setBalanceKnown(false);
+                if (failures >= 3) setUnreachable(true);
             }
         };
         void poll();
@@ -215,11 +223,21 @@ export function FundingGate({
                     <div className="flex items-start gap-2 rounded-[var(--radius-exit)] border border-exit-dead/40 bg-exit-dead/10 p-3 text-xs text-exit-dead">
                         <CircleAlert className="mt-0.5 size-4 shrink-0" />
                         <span>
-                            This address already holds{" "}
-                            <span className="font-mono tabular-nums tracking-[-0.01em]">
-                                {formatSats(balance + pending)}
-                            </span>
-                            . A new key gives you a different address and forgets this one — those
+                            {balanceKnown ? (
+                                <>
+                                    This address already holds{" "}
+                                    <span className="font-mono tabular-nums tracking-[-0.01em]">
+                                        {formatSats(balance + pending)}
+                                    </span>
+                                    .{" "}
+                                </>
+                            ) : (
+                                <>
+                                    The balance at this address could not be read, so it may hold
+                                    funds.{" "}
+                                </>
+                            )}
+                            A new key gives you a different address and forgets this one — those
                             sats would only be reachable through an exported bundle. Export the
                             package first if you want them back.
                         </span>
@@ -268,7 +286,12 @@ export function FundingGate({
                                 size="sm"
                                 variant="ghost"
                                 onClick={() => {
-                                    if (balance + pending > 0) {
+                                    // Confirm unless we positively know the
+                                    // address is empty. Failing open here would
+                                    // discard the key on a failed balance read,
+                                    // which is exactly when the funds are least
+                                    // accounted for.
+                                    if (!balanceKnown || balance + pending > 0) {
                                         setConfirmingNewKey(true);
                                         return;
                                     }
