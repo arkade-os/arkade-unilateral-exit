@@ -18,13 +18,19 @@ import {
     cn,
     loadOrCreateFeeKey,
     makeFeeWallet,
+    outstandingFundingSats,
     phaseFor,
+    phaseForChainState,
+    probeExitProgress,
+    stepState,
+    type ExitProgress,
     type FeeWalletHandle,
     type StepPhase,
+    type TxState,
 } from "../index";
 import { FundingGate } from "./FundingGate";
 
-type RunPhase = "funding" | "running";
+type RunPhase = "probing" | "funding" | "running";
 
 export function RunScreen({
     pkg,
@@ -52,15 +58,40 @@ export function RunScreen({
     onComplete?: () => void;
 }) {
     const graph = pkg.mode === "graph";
-    // Graph mode always shows the funding gate — even with an embedded fee key it
-    // stays visible so the fee address is never hidden and the balance is
-    // confirmed before broadcasting (an embedded key just pre-funds it).
-    const [phase, setPhase] = useState<RunPhase>(graph ? "funding" : "running");
+    // Graph mode asks the chain first. A resumed exit has usually paid for some
+    // of its bumps already, and the gate must not charge for those again — nor
+    // show at all when nothing is owed, which is the common case once every
+    // unroll is onchain and only the self-paying sweeps remain.
+    const [phase, setPhase] = useState<RunPhase>(graph ? "probing" : "running");
     const [fee, setFee] = useState<FeeWalletHandle | null>(null);
     const [feeKeyNonce, setFeeKeyNonce] = useState(0);
     const [feeError, setFeeError] = useState<string | null>(null);
+    const [progress, setProgress] = useState<ExitProgress | null>(null);
 
     const provider = useMemo(() => new EsploraProvider(esploraUrl), [esploraUrl]);
+
+    // Run for both modes: graph needs it to size the gate, and both need it to
+    // seed the timeline so already-onchain steps do not render as untouched.
+    // `probeExitProgress` never rejects, so there is no failure branch here —
+    // a degraded result simply reports nothing as done, which is what this
+    // screen assumed before the probe existed.
+    useEffect(() => {
+        let live = true;
+        void probeExitProgress(pkg, provider).then((p) => {
+            if (!live) return;
+            setProgress(p);
+            setPhase((current) =>
+                current === "probing"
+                    ? outstandingFundingSats(pkg, p) > 0
+                        ? "funding"
+                        : "running"
+                    : current,
+            );
+        });
+        return () => {
+            live = false;
+        };
+    }, [pkg, provider]);
 
     // Build the ephemeral fee wallet for graph mode.
     useEffect(() => {
@@ -89,13 +120,26 @@ export function RunScreen({
         </div>
     ) : null;
 
+    if (phase === "probing") {
+        if (feeError) return feeErrorBanner;
+        return <Centered>Checking what is already onchain…</Centered>;
+    }
+
     if (phase === "funding") {
         if (feeError) return feeErrorBanner;
         if (!fee) return <Centered>Preparing fee wallet…</Centered>;
         return (
             <FundingGate
                 fee={fee}
-                required={pkg.totals.fundingRequiredSats}
+                // Only reachable once the probe answered, but falling back to
+                // the package total keeps a non-null assertion out of a screen
+                // that gates real money.
+                required={
+                    progress
+                        ? outstandingFundingSats(pkg, progress)
+                        : pkg.totals.fundingRequiredSats
+                }
+                originalRequired={pkg.totals.fundingRequiredSats}
                 pkg={pkg}
                 onReady={() => setPhase("running")}
                 onRegenerate={(newKey) => {
@@ -116,6 +160,7 @@ export function RunScreen({
             provider={provider}
             feeWallet={fee?.wallet}
             sessionSaved={sessionSaved}
+            progress={progress}
             onComplete={onComplete}
         />
     );
@@ -126,12 +171,16 @@ function ExecutionTimeline({
     provider,
     feeWallet,
     sessionSaved,
+    progress,
     onComplete,
 }: {
     pkg: ExitPackage;
     provider: EsploraProvider;
     feeWallet?: FeeWalletHandle["wallet"];
     sessionSaved?: boolean;
+    /** Chain state sampled before execution started. Only ever a fallback for
+     * rows the executor has not spoken about — a live event always wins. */
+    progress?: ExitProgress | null;
     onComplete?: () => void;
 }) {
     const [events, setEvents] = useState<Map<number, ExecutorEvent>>(new Map());
@@ -195,11 +244,16 @@ function ExecutionTimeline({
         };
     }, [anyWaiting, provider]);
 
-    const confirmed = pkg.steps.filter((_, i) => {
+    const confirmed = pkg.steps.filter((step, i) => {
         const e = events.get(i);
         // A "skipped" step only counts as onchain when it was already there (no
         // reason); a skip with a reason means its branch failed upstream.
-        return e?.status === "confirmed" || (e?.status === "skipped" && !e.reason);
+        if (e) return e.status === "confirmed" || (e.status === "skipped" && !e.reason);
+        // No event yet: the probe is the only evidence. Counting it keeps the
+        // "N / M transactions onchain" line honest from the first render of a
+        // resumed exit, instead of starting at 0 and climbing as the executor
+        // re-walks work that finished weeks ago.
+        return progress ? stepState(step, progress) === "confirmed" : false;
     }).length;
     const failed = [...events.values()].filter((e) => e.status === "failed").length;
     const pct = pkg.steps.length ? (confirmed / pkg.steps.length) * 100 : 0;
@@ -292,6 +346,7 @@ function ExecutionTimeline({
                             "txid" in step ? step.txid : (step as { parentTxid: string }).parentTxid
                         }
                         event={events.get(i)}
+                        fallbackState={progress ? stepState(step, progress) : undefined}
                         tipHeight={tipHeight}
                     />
                 ))}
@@ -306,6 +361,7 @@ function TimelineRow({
     kindLabel,
     txid,
     event,
+    fallbackState,
     tipHeight,
 }: {
     index: number;
@@ -313,9 +369,15 @@ function TimelineRow({
     kindLabel: string;
     txid: string;
     event?: ExecutorEvent;
+    /** Chain state to show until the executor reaches this step. */
+    fallbackState?: TxState;
     tipHeight: number | null;
 }) {
-    const phase: StepPhase = event ? phaseFor(event.status, event.reason) : "pending";
+    const phase: StepPhase = event
+        ? phaseFor(event.status, event.reason)
+        : fallbackState
+          ? phaseForChainState(fallbackState)
+          : "pending";
     const s = PHASE_STYLE[phase];
     const blocksLeft =
         event?.status === "waiting_csv" && event.maturesAtHeight && tipHeight !== null

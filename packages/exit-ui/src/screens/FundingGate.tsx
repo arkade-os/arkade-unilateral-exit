@@ -37,12 +37,18 @@ function downloadText(filename: string, text: string) {
 export function FundingGate({
     fee,
     required,
+    originalRequired,
     pkg,
     onReady,
     onRegenerate,
 }: {
     fee: FeeWalletHandle;
+    /** Fee sats still owed, after discounting bumps already paid for. */
     required: number;
+    /** What the package asked for when it was built. Shown only when it differs
+     * from `required`, so a resumed exit explains why it is asking for less
+     * than the review screen quoted rather than looking like a rounding bug. */
+    originalRequired?: number;
     pkg: ExitPackage;
     onReady: () => void;
     /** Receives the newly minted key. It must be carried back up, not just
@@ -84,6 +90,7 @@ export function FundingGate({
 
     const funded = balance >= required;
     const pct = Math.min(100, required > 0 ? (balance / required) * 100 : 0);
+    const alreadyCovered = Math.max(0, (originalRequired ?? required) - required);
     // Serializing the whole pre-signed graph on every 5s balance poll is pure
     // waste; the bundle only changes when the package or the fee key does.
     const bundle = useMemo(() => encodeExitBundle(pkg, fee.privKeyHex), [pkg, fee.privKeyHex]);
@@ -103,6 +110,20 @@ export function FundingGate({
                     to this throwaway fee address. It only ever holds fee sats — never your exited
                     funds — and lives in this browser. Change comes back to it.
                 </p>
+
+                {alreadyCovered > 0 && (
+                    <p className="text-xs text-exit-ok">
+                        Part of this exit is already onchain, so this is less than the{" "}
+                        <span className="font-mono tabular-nums tracking-[-0.01em]">
+                            {formatSats(originalRequired!)}
+                        </span>{" "}
+                        the package quoted —{" "}
+                        <span className="font-mono tabular-nums tracking-[-0.01em]">
+                            {formatSats(alreadyCovered)}
+                        </span>{" "}
+                        of it have been paid for already.
+                    </p>
+                )}
 
                 <div className="flex items-center justify-between gap-3 rounded-[var(--radius-exit)] border border-exit-line bg-exit-panel-2/60 p-3">
                     <span className="font-mono tabular-nums tracking-[-0.01em] break-all text-xs text-exit-ink">
