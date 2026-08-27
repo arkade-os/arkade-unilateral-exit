@@ -31,6 +31,7 @@ const PUBLIC_SURFACE = [
     "loadOrCreateFeeKey",
     "resetFeeKey",
     "makeFeeWallet",
+    "splitBalances",
     // executor step mapping
     "phaseFor",
     "phaseForChainState",
