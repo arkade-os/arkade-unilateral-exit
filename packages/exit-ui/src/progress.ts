@@ -154,9 +154,17 @@ export function isSweepMature(step: ExitStep, progress: ExitProgress): boolean {
     if (step.kind !== "sweep" || !progress.tip) return false;
     const dep = progress.txs[step.dependsOnTxid];
     if (dep?.state !== "confirmed") return false;
-    return step.delay.type === "blocks"
-        ? progress.tip.height >= (dep.blockHeight ?? 0) + step.delay.value
-        : progress.tip.time >= (dep.blockTime ?? 0) + step.delay.value;
+    // Missing metadata is "unknown", never "mature". Defaulting the anchor to 0
+    // made the comparison trivially true, so a sweep would be reported as past
+    // its timelock on no evidence — a claim about the user's money with nothing
+    // behind it. The executor tolerates that because a premature broadcast is
+    // just rejected by the node; here it would be believed.
+    if (step.delay.type === "blocks") {
+        if (dep.blockHeight === undefined) return false;
+        return progress.tip.height >= dep.blockHeight + step.delay.value;
+    }
+    if (dep.blockTime === undefined) return false;
+    return progress.tip.time >= dep.blockTime + step.delay.value;
 }
 
 export interface ExitProgressSummary {
@@ -238,10 +246,42 @@ export function ctaLabelFor(pkg: ExitPackage, summary: ExitProgressSummary | nul
  * flaky endpoint must degrade to that rather than block the user from running
  * their exit. Individual failures set `degraded`.
  */
+/**
+ * How long any single chain lookup may take before the probe writes it off.
+ *
+ * The SDK's `baseFetch` is a bare `globalThis.fetch` with no timeout and no
+ * `AbortSignal`, so a wedged connection never settles. Unbounded, one such
+ * request keeps `Promise.all` pending forever and strands `RunScreen` on
+ * "Checking what is already onchain..." with no way out but a reload.
+ *
+ * Racing a timer does not cancel the underlying request — it cannot, without
+ * abort plumbing through the provider — but it does unblock the UI, which is
+ * what actually matters here.
+ */
+export const PROBE_TIMEOUT_MS = 10_000;
+
+function withDeadline<T>(work: Promise<T>, ms: number): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+        const id = setTimeout(() => reject(new Error("chain lookup timed out")), ms);
+        work.then(
+            (v) => {
+                clearTimeout(id);
+                resolve(v);
+            },
+            (e) => {
+                clearTimeout(id);
+                reject(e);
+            },
+        );
+    });
+}
+
 export async function probeExitProgress(
     pkg: ExitPackage,
     reader: ChainReader,
+    opts: { timeoutMs?: number } = {},
 ): Promise<ExitProgress> {
+    const timeoutMs = opts.timeoutMs ?? PROBE_TIMEOUT_MS;
     const wanted = new Set<string>();
     for (const step of pkg.steps) {
         wanted.add(anchorTxidFor(step));
@@ -252,10 +292,10 @@ export async function probeExitProgress(
     // The tip doubles as the endpoint health check, so it rides along with the
     // status lookups rather than waiting behind them.
     const [tip] = await Promise.all([
-        reader.getChainTip().catch(() => null),
+        withDeadline(reader.getChainTip(), timeoutMs).catch(() => null),
         ...[...wanted].map(async (txid) => {
             try {
-                const s = await reader.getTxStatus(txid);
+                const s = await withDeadline(reader.getTxStatus(txid), timeoutMs);
                 txs[txid] = s.confirmed
                     ? { state: "confirmed", blockHeight: s.blockHeight, blockTime: s.blockTime }
                     : { state: "mempool" };

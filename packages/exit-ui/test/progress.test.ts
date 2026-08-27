@@ -216,6 +216,38 @@ describe("isSweepMature", () => {
         expect(isSweepMature(blockSweep, progress(dep, { height: 900_144, time: 0 }))).toBe(true);
     });
 
+    /**
+     * A confirmed dependency whose status is missing the field the delay type
+     * needs. `(dep.blockHeight ?? 0) + delay` made maturity trivially true, so
+     * the review screen would report value as "past its timelock and sweepable
+     * now" on no evidence at all — a claim about the user's money that nothing
+     * backs. Unknown must read as not-yet-mature.
+     */
+    it("is false when the confirmed dependency lacks the field the delay needs", () => {
+        const p = pkg();
+        const blockSweep = {
+            ...p.steps[4],
+            delay: { type: "blocks", value: 144 },
+        } as ExitPackage["steps"][number];
+        // Blocks delay, but only a blockTime was recorded.
+        expect(
+            isSweepMature(
+                blockSweep,
+                progress({ aa: { state: "confirmed", blockTime: 1 } }, { height: 9e6, time: 9e9 }),
+            ),
+        ).toBe(false);
+        // Seconds delay, but only a blockHeight was recorded.
+        expect(
+            isSweepMature(
+                p.steps[4],
+                progress(
+                    { aa: { state: "confirmed", blockHeight: 1 } },
+                    { height: 9e6, time: 9e9 },
+                ),
+            ),
+        ).toBe(false);
+    });
+
     it("is false for a step that is not a sweep", () => {
         expect(isSweepMature(pkg().steps[0], progress({}, { height: 1, time: 1e9 }))).toBe(false);
     });
@@ -393,6 +425,37 @@ describe("probeExitProgress", () => {
         expect(p.degraded).toBe(true);
         // Still reports what it did learn — a partial result, not a failure.
         expect(p.txs.aa.state).toBe("confirmed");
+    });
+
+    /**
+     * `baseFetch` is a bare `globalThis.fetch` with no timeout or AbortSignal,
+     * so a wedged connection never settles. Without a bound the probe's
+     * `Promise.all` never resolves and `RunScreen` sits on "Checking what is
+     * already onchain..." forever, with no way out but a reload.
+     */
+    it("gives up on a reader that never settles, instead of hanging forever", async () => {
+        const hung: ChainReader = {
+            getTxStatus: () => new Promise(() => {}),
+            getChainTip: () => new Promise(() => {}),
+        };
+        const p = await probeExitProgress(pkg(), hung, { timeoutMs: 20 });
+        expect(p.tip).toBeNull();
+        expect(p.degraded).toBe(true);
+        // Everything unknown, which is the safe reading: nothing counts as done.
+        expect(summarizeExitProgress(pkg(), p).confirmed).toBe(0);
+    });
+
+    it("still uses whatever answered before the deadline", async () => {
+        const slowTip: ChainReader = {
+            async getTxStatus(txid) {
+                if (txid === "aa") return { confirmed: true, blockTime: 5 };
+                throw new Error("Not Found");
+            },
+            getChainTip: () => new Promise(() => {}),
+        };
+        const p = await probeExitProgress(pkg(), slowTip, { timeoutMs: 20 });
+        expect(p.txs.aa.state).toBe("confirmed");
+        expect(p.tip).toBeNull();
     });
 
     it("never rejects, whatever the reader does", async () => {
