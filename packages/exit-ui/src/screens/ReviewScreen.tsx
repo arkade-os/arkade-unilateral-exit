@@ -123,7 +123,14 @@ export function ReviewScreen({
     // The package's own `fundingRequiredSats` is bare fees and cannot actually
     // complete the exit, so quote the probe's figure once it lands and fall back
     // to the package's only until then.
-    const fundingToQuote = summary?.outstandingFundingSats ?? pkg.totals.fundingRequiredSats;
+    //
+    // Graph only. A `funded` package needs no wallet at all, so the probe
+    // reports 0 for it — letting that through would flip this stat from the
+    // package's figure to "0 sats" the moment the probe landed, purely as a
+    // function of network timing.
+    const fundingToQuote = graph
+        ? (summary?.outstandingFundingSats ?? pkg.totals.fundingRequiredSats)
+        : pkg.totals.fundingRequiredSats;
     const fundingDiffers = graph && !!summary && fundingToQuote !== pkg.totals.fundingRequiredSats;
 
     // Ask the chain whether any of this already happened. A package is a static
