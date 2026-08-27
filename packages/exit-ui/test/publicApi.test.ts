@@ -31,6 +31,8 @@ const PUBLIC_SURFACE = [
     "loadOrCreateFeeKey",
     "resetFeeKey",
     "makeFeeWallet",
+    "quoteFeeSweep",
+    "SWEEP_DUST_SATS",
     "splitBalances",
     // executor step mapping
     "phaseFor",
@@ -65,6 +67,7 @@ const PUBLIC_SURFACE = [
     "ImportScreen",
     "ReviewScreen",
     "FundingGate",
+    "RecoverRemainder",
     "RunScreen",
     "ExitFlow",
 ] as const;

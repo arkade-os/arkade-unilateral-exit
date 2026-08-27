@@ -1,4 +1,5 @@
 export { esploraUrlFor } from "./esplora";
+export { quoteFeeSweep, SWEEP_DUST_SATS, type FeeSweepQuote } from "./feeRecovery";
 export {
     loadOrCreateFeeKey,
     resetFeeKey,
@@ -63,5 +64,6 @@ export { formatSats, btc } from "./format";
 export { ImportScreen } from "./screens/ImportScreen";
 export { ReviewScreen } from "./screens/ReviewScreen";
 export { FundingGate } from "./screens/FundingGate";
+export { RecoverRemainder } from "./screens/RecoverRemainder";
 export { RunScreen } from "./screens/RunScreen";
 export { ExitFlow } from "./ExitFlow";

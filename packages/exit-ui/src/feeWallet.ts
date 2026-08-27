@@ -5,6 +5,7 @@ import {
     type ExitFeeWallet,
     type NetworkName,
 } from "@arkade-os/sdk";
+import { quoteFeeSweep, SWEEP_DUST_SATS } from "./feeRecovery";
 import { FEE_KEY_RE } from "./package";
 import { defaultStore, type SessionStore } from "./session";
 
@@ -105,6 +106,19 @@ export interface FeeWalletHandle {
     /** Confirmed and pending balances from a single `getCoins` call — polling
      * twice a second apart would let them disagree across a confirmation. */
     balances(): Promise<FeeBalances>;
+    /**
+     * Send every confirmed coin to `address`, leaving the wallet empty.
+     *
+     * Graph mode always ends with sats stranded here: the funding quote
+     * deliberately includes a dust reserve the last CPFP bump must leave as
+     * change, so a *successful* exit finishes with a non-empty fee wallet by
+     * design. Without this the only way to get them back is to export the
+     * bundle and drive the key by hand.
+     *
+     * Quotes with {@link quoteFeeSweep} and refuses a sweep that is not viable,
+     * rather than handing the whole balance to miners for a dust output.
+     */
+    sweepAll(address: string, feeRate: number): Promise<{ txid: string; amountSats: number }>;
     /** Passed to `UnilateralExit.Executor` as its {@link ExitFeeWallet}. */
     wallet: OnchainWallet & ExitFeeWallet;
 }
@@ -131,5 +145,32 @@ export async function makeFeeWallet(
             return (await balances()).confirmed;
         },
         balances,
+        async sweepAll(address, feeRate) {
+            // Re-read rather than trust a polled figure: the panel refreshes on
+            // a timer, and sweeping a stale balance would either leave sats
+            // behind or ask `send` for more than the wallet holds.
+            const coins = (await wallet.getCoins()).filter((c) => c.status.confirmed);
+            const quote = quoteFeeSweep({
+                balanceSats: coins.reduce((sum, c) => sum + c.value, 0),
+                inputCount: coins.length,
+                destination: address,
+                network,
+                feeRate,
+            });
+            if (!quote.viable) {
+                throw new Error(
+                    quote.balanceSats === 0
+                        ? "Nothing left to recover."
+                        : `Too little to recover: ${quote.balanceSats} sats would leave ` +
+                              `${quote.amountSats} after fees, under the ${SWEEP_DUST_SATS} sat dust limit.`,
+                );
+            }
+            const txid = await wallet.send({
+                address,
+                amount: quote.amountSats,
+                feeRate,
+            });
+            return { txid, amountSats: quote.amountSats };
+        },
     };
 }
