@@ -18,6 +18,7 @@ import {
     cn,
     loadOrCreateFeeKey,
     makeFeeWallet,
+    fundingNeed,
     outstandingFundingSats,
     phaseFor,
     phaseForChainState,
@@ -132,14 +133,9 @@ export function RunScreen({
             <FundingGate
                 fee={fee}
                 // Only reachable once the probe answered, but falling back to
-                // the package total keeps a non-null assertion out of a screen
-                // that gates real money.
-                required={
-                    progress
-                        ? outstandingFundingSats(pkg, progress)
-                        : pkg.totals.fundingRequiredSats
-                }
-                originalRequired={pkg.totals.fundingRequiredSats}
+                // an all-unpaid reading keeps a non-null assertion out of a
+                // screen that gates real money.
+                need={fundingNeed(pkg, progress ?? { txs: {}, tip: null, degraded: true })}
                 pkg={pkg}
                 onReady={() => setPhase("running")}
                 onRegenerate={(newKey) => {

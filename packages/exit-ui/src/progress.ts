@@ -66,29 +66,81 @@ export function stepState(step: ExitStep, progress: ExitProgress): TxState {
 }
 
 /**
- * Graph-mode fee sats still owed to the fee address.
+ * Minimum change the SDK's anchor-child builder will accept.
+ *
+ * `buildAnchorChild` always writes exactly one change output and throws
+ * "insufficient funding for anchor child: need change >= 546" when it would
+ * fall below this. There is no absorb-the-remainder-into-fee path, so a wallet
+ * holding exactly the fees cannot pay them: the last bump has nowhere legal to
+ * put what is left.
+ */
+export const CHILD_DUST_AMOUNT = 546;
+
+export interface FundingNeed {
+    /** Total the fee wallet must hold before the remaining bumps can run. */
+    requiredSats: number;
+    /** Fees for the bumps not yet paid for. */
+    feesSats: number;
+    /** Non-dust change the final bump must leave behind. Not spent — it stays
+     * in the fee wallet and is recoverable with the key. */
+    reserveSats: number;
+    unpaidBumps: number;
+    totalBumps: number;
+}
+
+/**
+ * What the fee wallet must hold for the remaining graph-mode bumps.
  *
  * `fundingRequiredSats` is the sum of every `bump` step's CPFP fee, frozen when
  * the package was built (SDK: `fundingRequiredSats: graph ? stepFees : …`), and
  * the per-step split is not transported. So this apportions the total evenly
- * across bump steps and charges only for those not yet paid for.
+ * across bump steps and charges only for those not yet paid for. A bump already
+ * in the mempool has *had* its fee spent — its CPFP child is built and
+ * broadcast — so only a `pending` bump still costs anything.
  *
- * A bump already in the mempool has *had* its fee spent — the CPFP child is
- * built and broadcast — so only a `pending` bump still costs anything.
+ * On top of the fees sits one {@link CHILD_DUST_AMOUNT} reserve. Change
+ * recycles to the same address, so each bump spends the whole balance and hands
+ * the remainder to the next; only the *final* change has to clear the dust
+ * floor, and it binds the whole chain. One reserve covers any number of bumps.
+ *
+ * This deliberately asks for more than the package quotes. The SDK's own
+ * `fundingRequiredSats` is bare fees, so depositing exactly what a graph
+ * package asks for strands the last bump — 1112 sats against four 278-sat
+ * bumps funds only two, then dies with 278 sats of illegal change.
  *
  * Even apportionment is exact when every unroll parent has the same shape, and
  * an approximation otherwise; it rounds up so the estimate errs towards asking
  * for slightly too much rather than opening the gate on an underfunded wallet.
- * Returns 0 for `funded` packages: their fees were locked into the splitter at
- * prepare time and the executor needs no wallet at all.
+ */
+export function fundingNeed(pkg: ExitPackage, progress: ExitProgress): FundingNeed {
+    const bumps = pkg.mode === "graph" ? pkg.steps.filter((s) => s.kind === "bump") : [];
+    const unpaid = bumps.filter((s) => stepState(s, progress) === "pending").length;
+    if (unpaid === 0) {
+        return {
+            requiredSats: 0,
+            feesSats: 0,
+            reserveSats: 0,
+            unpaidBumps: 0,
+            totalBumps: bumps.length,
+        };
+    }
+    const feesSats = Math.ceil((pkg.totals.fundingRequiredSats * unpaid) / bumps.length);
+    return {
+        requiredSats: feesSats + CHILD_DUST_AMOUNT,
+        feesSats,
+        reserveSats: CHILD_DUST_AMOUNT,
+        unpaidBumps: unpaid,
+        totalBumps: bumps.length,
+    };
+}
+
+/**
+ * Sats the fee wallet must hold before execution can proceed; 0 when the gate
+ * should be skipped entirely. Returns 0 for `funded` packages — their fees were
+ * locked into the splitter at prepare time and the executor needs no wallet.
  */
 export function outstandingFundingSats(pkg: ExitPackage, progress: ExitProgress): number {
-    if (pkg.mode !== "graph") return 0;
-    const bumps = pkg.steps.filter((s) => s.kind === "bump");
-    if (bumps.length === 0) return 0;
-    const unpaid = bumps.filter((s) => stepState(s, progress) === "pending").length;
-    if (unpaid === 0) return 0;
-    return Math.ceil((pkg.totals.fundingRequiredSats * unpaid) / bumps.length);
+    return fundingNeed(pkg, progress).requiredSats;
 }
 
 /**

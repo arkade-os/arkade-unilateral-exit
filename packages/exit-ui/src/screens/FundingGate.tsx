@@ -12,6 +12,7 @@ import {
     encodeExitBundle,
     resetFeeKey,
     type FeeWalletHandle,
+    type FundingNeed,
 } from "../index";
 import { formatSats } from "../format";
 
@@ -36,19 +37,15 @@ function downloadText(filename: string, text: string) {
  */
 export function FundingGate({
     fee,
-    required,
-    originalRequired,
+    need,
     pkg,
     onReady,
     onRegenerate,
 }: {
     fee: FeeWalletHandle;
-    /** Fee sats still owed, after discounting bumps already paid for. */
-    required: number;
-    /** What the package asked for when it was built. Shown only when it differs
-     * from `required`, so a resumed exit explains why it is asking for less
-     * than the review screen quoted rather than looking like a rounding bug. */
-    originalRequired?: number;
+    /** What the wallet must hold, broken down, so the figure can explain itself
+     * — it is neither the package's quote nor a plain sum of fees. */
+    need: FundingNeed;
     pkg: ExitPackage;
     onReady: () => void;
     /** Receives the newly minted key. It must be carried back up, not just
@@ -88,9 +85,10 @@ export function FundingGate({
         };
     }, [fee]);
 
+    const required = need.requiredSats;
     const funded = balance >= required;
     const pct = Math.min(100, required > 0 ? (balance / required) * 100 : 0);
-    const alreadyCovered = Math.max(0, (originalRequired ?? required) - required);
+    const paidBumps = need.totalBumps - need.unpaidBumps;
     // Serializing the whole pre-signed graph on every 5s balance poll is pure
     // waste; the bundle only changes when the package or the fee key does.
     const bundle = useMemo(() => encodeExitBundle(pkg, fee.privKeyHex), [pkg, fee.privKeyHex]);
@@ -111,19 +109,35 @@ export function FundingGate({
                     funds — and lives in this browser. Change comes back to it.
                 </p>
 
-                {alreadyCovered > 0 && (
-                    <p className="text-xs text-exit-ok">
-                        Part of this exit is already onchain, so this is less than the{" "}
-                        <span className="font-mono tabular-nums tracking-[-0.01em]">
-                            {formatSats(originalRequired!)}
-                        </span>{" "}
-                        the package quoted —{" "}
-                        <span className="font-mono tabular-nums tracking-[-0.01em]">
-                            {formatSats(alreadyCovered)}
-                        </span>{" "}
-                        of it have been paid for already.
-                    </p>
-                )}
+                {/* The figure matches neither the package's quote nor a bare sum
+                    of fees, so it has to account for itself: the executor's
+                    anchor-child builder rejects change under 546 sats, and a
+                    wallet holding exactly the fees cannot pay the last one. */}
+                <ul className="flex flex-col gap-1 text-xs text-exit-ink-dim">
+                    <li className="flex justify-between gap-3">
+                        <span>
+                            Fees for {need.unpaidBumps} of {need.totalBumps} unrolls
+                            {paidBumps > 0 && (
+                                <span className="text-exit-ok">
+                                    {" "}
+                                    ({paidBumps} already onchain and paid for)
+                                </span>
+                            )}
+                        </span>
+                        <span className="font-mono tabular-nums tracking-[-0.01em] shrink-0">
+                            {formatSats(need.feesSats)}
+                        </span>
+                    </li>
+                    <li className="flex justify-between gap-3">
+                        <span>
+                            Reserve the last unroll must leave as change — it stays in this wallet,
+                            not spent
+                        </span>
+                        <span className="font-mono tabular-nums tracking-[-0.01em] shrink-0">
+                            {formatSats(need.reserveSats)}
+                        </span>
+                    </li>
+                </ul>
 
                 <div className="flex items-center justify-between gap-3 rounded-[var(--radius-exit)] border border-exit-line bg-exit-panel-2/60 p-3">
                     <span className="font-mono tabular-nums tracking-[-0.01em] break-all text-xs text-exit-ink">

@@ -1,6 +1,7 @@
 import type { ExitPackage } from "@arkade-os/sdk";
 import { describe, expect, it } from "vitest";
 import {
+    CHILD_DUST_AMOUNT,
     anchorTxidFor,
     ctaLabelFor,
     isSweepMature,
@@ -97,7 +98,7 @@ describe("stepState", () => {
 
 describe("outstandingFundingSats", () => {
     it("asks for the whole amount when nothing has been done", () => {
-        expect(outstandingFundingSats(pkg(), EMPTY)).toBe(1112);
+        expect(outstandingFundingSats(pkg(), EMPTY)).toBe(1112 + CHILD_DUST_AMOUNT);
     });
 
     // The bug this exists to fix: a half-executed exit was gated on the
@@ -105,14 +106,46 @@ describe("outstandingFundingSats", () => {
     // bumps that had already confirmed and been paid for.
     it("charges only for bumps that have not been paid for", () => {
         const p = progress({ aa: { state: "confirmed" }, bb: { state: "confirmed" } });
-        expect(outstandingFundingSats(pkg(), p)).toBe(556);
+        // 2 unpaid bumps at 278 each, plus the reserve the last one must leave.
+        expect(outstandingFundingSats(pkg(), p)).toBe(556 + CHILD_DUST_AMOUNT);
+    });
+
+    /**
+     * Regression, from a real mainnet exit that failed on this exact arithmetic.
+     *
+     * `buildAnchorChild` always writes one change output and rejects change
+     * below `CHILD_DUST_AMOUNT` — there is no absorb-into-fee path. Quoting
+     * bare fees let the gate open on a 556-sat wallet with two 278-sat bumps
+     * left; the first consumed 278 and tried to leave 278 as change, and the
+     * executor died with "need change >= 546, got 278". Both branches were
+     * marked dead and their sweeps failed with them.
+     */
+    it("reserves the non-dust change the last bump must leave behind", () => {
+        const twoPaid = progress({ aa: { state: "confirmed" }, bb: { state: "confirmed" } });
+        const need = outstandingFundingSats(pkg(), twoPaid);
+        expect(need).toBe(1102);
+        // The balance that actually failed onchain must not clear the gate.
+        expect(556 >= need).toBe(false);
+        // Walk the SDK's rule forward: every bump leaves legal change.
+        let balance = need;
+        for (let i = 0; i < 2; i++) {
+            balance -= 278;
+            expect(balance).toBeGreaterThanOrEqual(CHILD_DUST_AMOUNT);
+        }
+    });
+
+    // The SDK's own `fundingRequiredSats` is bare fees too, so a package that
+    // quotes 1112 for four 278-sat bumps can only ever fund two of them. The
+    // gate must ask for more than the package does, not merely echo it.
+    it("asks for more than the package quotes on a fresh graph exit", () => {
+        expect(outstandingFundingSats(pkg(), EMPTY)).toBe(1112 + CHILD_DUST_AMOUNT);
     });
 
     // A bump in the mempool has already spent its fee on the CPFP child, so
     // charging for it again would ask for sats that are demonstrably not needed.
     it("treats an in-mempool bump as already paid for", () => {
         const p = progress({ aa: { state: "confirmed" }, bb: { state: "mempool" } });
-        expect(outstandingFundingSats(pkg(), p)).toBe(556);
+        expect(outstandingFundingSats(pkg(), p)).toBe(556 + CHILD_DUST_AMOUNT);
     });
 
     it("owes nothing once every bump is accounted for", () => {
@@ -134,8 +167,8 @@ describe("outstandingFundingSats", () => {
                 pkg({ totals: { ...pkg().totals, fundingRequiredSats: 999 } }),
                 one,
             ),
-        ).toBe(500);
-        expect(outstandingFundingSats(p, EMPTY)).toBe(1000);
+        ).toBe(500 + CHILD_DUST_AMOUNT);
+        expect(outstandingFundingSats(p, EMPTY)).toBe(1000 + CHILD_DUST_AMOUNT);
     });
 
     // `funded` packages pre-paid their fees into the splitter at prepare time;
@@ -197,7 +230,7 @@ describe("summarizeExitProgress", () => {
             total: 8,
             isInProgress: false,
             isComplete: false,
-            outstandingFundingSats: 1112,
+            outstandingFundingSats: 1112 + CHILD_DUST_AMOUNT,
             sweepableSats: 0,
         });
     });
@@ -216,7 +249,7 @@ describe("summarizeExitProgress", () => {
         expect(s.confirmed).toBe(2);
         expect(s.isInProgress).toBe(true);
         expect(s.sweepableSats).toBe(187592 + 2100);
-        expect(s.outstandingFundingSats).toBe(556);
+        expect(s.outstandingFundingSats).toBe(556 + CHILD_DUST_AMOUNT);
     });
 
     // Value already swept is not "recoverable" — it has been recovered.
@@ -347,7 +380,9 @@ describe("probeExitProgress", () => {
     it("is not degraded when lookups 404 but the endpoint is healthy", async () => {
         const p = await probeExitProgress(pkg(), reader({}, { tip: { height: 1, time: 1 } }));
         expect(p.degraded).toBe(false);
-        expect(summarizeExitProgress(pkg(), p).outstandingFundingSats).toBe(1112);
+        expect(summarizeExitProgress(pkg(), p).outstandingFundingSats).toBe(
+            1112 + CHILD_DUST_AMOUNT,
+        );
     });
 
     // An unreadable tip is the one unambiguous signal that the endpoint is not
