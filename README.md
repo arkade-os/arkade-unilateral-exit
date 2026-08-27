@@ -175,8 +175,8 @@ Cutting a release is an explicit act — bump the version, tag it, push the tag:
 ```bash
 # 1. bump packages/exit-ui/package.json "version"
 # 2. commit that on master
-git tag exit-ui-v0.1.0
-git push origin exit-ui-v0.1.0
+git tag exit-ui-v<version>
+git push origin exit-ui-v<version>
 ```
 
 `.github/workflows/release-exit-ui.yml` then runs lint, typecheck, tests and the build, checks the
@@ -188,7 +188,7 @@ Consumers install by URL, with no registry involved:
 ```json
 {
     "dependencies": {
-        "@arkade-os/exit-ui": "https://github.com/arkade-os/arkade-unilateral-exit/releases/download/exit-ui-v0.1.0/arkade-os-exit-ui-0.1.0.tgz"
+        "@arkade-os/exit-ui": "https://github.com/arkade-os/arkade-unilateral-exit/releases/download/exit-ui-v0.2.0/arkade-os-exit-ui-0.2.0.tgz"
     }
 }
 ```

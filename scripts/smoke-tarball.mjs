@@ -49,6 +49,16 @@ for (const name of [
     "esploraUrlFor",
     "loadOrCreateFeeKey",
     "phaseFor",
+    // Added in 0.2.0. Listed here as well as in `publicApi.test.ts` because the
+    // in-repo test can pass on a surface the packed artifact does not actually
+    // expose — that gap is the reason this script exists.
+    "probeExitProgress",
+    "summarizeExitProgress",
+    "fundingNeed",
+    "outstandingFundingSats",
+    "quoteFeeSweep",
+    "splitBalances",
+    "RecoverRemainder",
 ]) {
     check(name, name in mod && mod[name] !== undefined, "not exported");
 }
@@ -68,6 +78,17 @@ try {
         mod.phaseFor("skipped", "parent failed") === "skipped",
     );
     check("phaseFor(skipped) is confirmed", mod.phaseFor("skipped") === "confirmed");
+
+    // A sweep quote that cannot cover its own fee must report itself unviable
+    // rather than offering to hand the balance to miners.
+    const dusty = mod.quoteFeeSweep({
+        balanceSats: 50,
+        inputCount: 1,
+        destination: "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4",
+        network: "bitcoin",
+        feeRate: 1,
+    });
+    check("quoteFeeSweep refuses an unviable sweep", dusty.viable === false, JSON.stringify(dusty));
 } catch (err) {
     check("logic runs without throwing", false, err.message);
 }
