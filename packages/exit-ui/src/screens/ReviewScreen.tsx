@@ -120,10 +120,11 @@ export function ReviewScreen({
         [pkg.validUntil],
     );
     const hasConditionSweep = active.some((v) => v.path?.startsWith("vhtlc"));
-    // Before the probe answers, the package's own figure is the only one there
-    // is — and it is the safe one to show, since it can only be too high.
+    // The package's own `fundingRequiredSats` is bare fees and cannot actually
+    // complete the exit, so quote the probe's figure once it lands and fall back
+    // to the package's only until then.
     const fundingToQuote = summary?.outstandingFundingSats ?? pkg.totals.fundingRequiredSats;
-    const fundingReduced = graph && fundingToQuote < pkg.totals.fundingRequiredSats;
+    const fundingDiffers = graph && !!summary && fundingToQuote !== pkg.totals.fundingRequiredSats;
 
     // Ask the chain whether any of this already happened. A package is a static
     // document — it cannot tell you it is half-executed, and the user who
@@ -183,10 +184,11 @@ export function ReviewScreen({
                         label={graph ? "You send" : "Funding needed"}
                         value={formatSats(fundingToQuote)}
                         hint={
-                            fundingReduced ? (
-                                <span className="text-exit-ok">
-                                    down from {formatSats(pkg.totals.fundingRequiredSats)} — the
-                                    rest is already paid
+                            fundingDiffers ? (
+                                <span className="text-exit-ink-dim">
+                                    to a throwaway fee address — not the{" "}
+                                    {formatSats(pkg.totals.fundingRequiredSats)} the package quotes;
+                                    see the breakdown next
                                 </span>
                             ) : graph ? (
                                 "to a throwaway fee address"

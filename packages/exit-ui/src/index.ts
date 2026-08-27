@@ -26,6 +26,8 @@ export {
     probeExitProgress,
     summarizeExitProgress,
     outstandingFundingSats,
+    fundingNeed,
+    CHILD_DUST_AMOUNT,
     isSweepMature,
     anchorTxidFor,
     stepState,
@@ -33,6 +35,7 @@ export {
     type ChainReader,
     type ExitProgress,
     type ExitProgressSummary,
+    type FundingNeed,
     type TxFacts,
     type TxState,
 } from "./progress";

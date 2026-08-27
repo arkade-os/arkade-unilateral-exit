@@ -40,6 +40,8 @@ const PUBLIC_SURFACE = [
     "probeExitProgress",
     "summarizeExitProgress",
     "outstandingFundingSats",
+    "fundingNeed",
+    "CHILD_DUST_AMOUNT",
     "isSweepMature",
     "anchorTxidFor",
     "stepState",
