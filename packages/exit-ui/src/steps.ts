@@ -1,4 +1,5 @@
 import type { ExecutorEvent, ExitStep } from "@arkade-os/sdk";
+import type { TxState } from "./progress";
 
 export type StepPhase = "pending" | "active" | "confirmed" | "waiting" | "failed" | "skipped";
 
@@ -29,6 +30,28 @@ export function phaseFor(status: ExecutorEvent["status"], reason?: string): Step
         case "warning":
         case "broadcast":
             return "active";
+    }
+}
+
+/**
+ * Display phase for a step the executor has not said anything about yet.
+ *
+ * It stays silent about more than you would expect. On a resumed exit a step
+ * whose transaction is already in the mempool takes the executor's
+ * `if (!existing)` branch — no broadcast, therefore no event — and then blocks
+ * in `waitConfirmed` until it confirms. With no event the row would render as
+ * an untouched "Pending", indistinguishable from a step that never ran, for as
+ * long as the transaction takes to confirm. Seeding from the chain probe is
+ * what makes a resumed exit look like it is doing something.
+ */
+export function phaseForChainState(state: TxState): StepPhase {
+    switch (state) {
+        case "confirmed":
+            return "confirmed";
+        case "mempool":
+            return "active";
+        case "pending":
+            return "pending";
     }
 }
 

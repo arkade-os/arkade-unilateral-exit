@@ -21,7 +21,21 @@ export {
     type SessionStore,
     type SessionScreen,
 } from "./session";
-export { phaseFor, KIND_LABEL, PHASE_STYLE, type StepPhase } from "./steps";
+export { phaseFor, phaseForChainState, KIND_LABEL, PHASE_STYLE, type StepPhase } from "./steps";
+export {
+    probeExitProgress,
+    summarizeExitProgress,
+    outstandingFundingSats,
+    isSweepMature,
+    anchorTxidFor,
+    stepState,
+    ctaLabelFor,
+    type ChainReader,
+    type ExitProgress,
+    type ExitProgressSummary,
+    type TxFacts,
+    type TxState,
+} from "./progress";
 
 // UI primitives. Styled against the `--color-exit-*` / `--radius-exit` contract
 // the consuming app declares in its own `@theme`, so each app keeps its palette.

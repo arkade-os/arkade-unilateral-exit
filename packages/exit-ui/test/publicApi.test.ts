@@ -33,8 +33,17 @@ const PUBLIC_SURFACE = [
     "makeFeeWallet",
     // executor step mapping
     "phaseFor",
+    "phaseForChainState",
     "KIND_LABEL",
     "PHASE_STYLE",
+    // chain-derived progress
+    "probeExitProgress",
+    "summarizeExitProgress",
+    "outstandingFundingSats",
+    "isSweepMature",
+    "anchorTxidFor",
+    "stepState",
+    "ctaLabelFor",
     // formatting + primitives
     "formatSats",
     "btc",

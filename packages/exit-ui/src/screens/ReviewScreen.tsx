@@ -1,6 +1,21 @@
-import type { ExitDelay, ExitPackage, ExitVtxoInfo } from "@arkade-os/sdk";
-import { AlertTriangle, ArrowRight, ChevronDown, Clock, Eye, Info, Lock } from "lucide-react";
-import { useMemo, useState, type ReactNode } from "react";
+import {
+    EsploraProvider,
+    type ExitDelay,
+    type ExitPackage,
+    type ExitVtxoInfo,
+} from "@arkade-os/sdk";
+import {
+    AlertTriangle,
+    ArrowRight,
+    CheckCircle2,
+    ChevronDown,
+    Clock,
+    Eye,
+    History,
+    Info,
+    Lock,
+} from "lucide-react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
     Button,
     Card,
@@ -9,8 +24,12 @@ import {
     CardTitle,
     Tooltip,
     cn,
+    ctaLabelFor,
     esploraUrlFor,
+    probeExitProgress,
+    summarizeExitProgress,
     truncateMiddle,
+    type ExitProgressSummary,
 } from "../index";
 import { btc, formatSats } from "../format";
 
@@ -85,6 +104,11 @@ export function ReviewScreen({
 }) {
     const [esplora, setEsplora] = useState(() => esploraUrlFor(pkg.network, esploraOverride));
     const [showAdvanced, setShowAdvanced] = useState(false);
+    // Frozen at mount so editing the endpoint in Advanced settings does not fire
+    // a probe per keystroke. This card is informational; the endpoint that
+    // actually gates funding is re-probed by `RunScreen` after Continue.
+    const [probeUrl] = useState(() => esploraUrlFor(pkg.network, esploraOverride));
+    const [summary, setSummary] = useState<ExitProgressSummary | null>(null);
     const active = pkg.vtxos.filter((v) => !v.skipped);
     const skipped = pkg.vtxos.filter((v) => v.skipped);
     const graph = pkg.mode === "graph";
@@ -96,6 +120,23 @@ export function ReviewScreen({
         [pkg.validUntil],
     );
     const hasConditionSweep = active.some((v) => v.path?.startsWith("vhtlc"));
+    // Before the probe answers, the package's own figure is the only one there
+    // is — and it is the safe one to show, since it can only be too high.
+    const fundingToQuote = summary?.outstandingFundingSats ?? pkg.totals.fundingRequiredSats;
+    const fundingReduced = graph && fundingToQuote < pkg.totals.fundingRequiredSats;
+
+    // Ask the chain whether any of this already happened. A package is a static
+    // document — it cannot tell you it is half-executed, and the user who
+    // reloaded mid-exit has no other way to find out.
+    useEffect(() => {
+        let live = true;
+        void probeExitProgress(pkg, new EsploraProvider(probeUrl)).then((p) => {
+            if (live) setSummary(summarizeExitProgress(pkg, p));
+        });
+        return () => {
+            live = false;
+        };
+    }, [pkg, probeUrl]);
 
     return (
         <div className="flex flex-col gap-5">
@@ -135,10 +176,24 @@ export function ReviewScreen({
                         value={formatSats(pkg.totals.totalFeeSats)}
                         hint={`${pkg.feeRate} sat/vB`}
                     />
+                    {/* Quotes what is still owed, not what the package asked for
+                        when it was built — otherwise this reads 1,112 while the
+                        gate on the very next screen asks for 556. */}
                     <Stat
                         label={graph ? "You send" : "Funding needed"}
-                        value={formatSats(pkg.totals.fundingRequiredSats)}
-                        hint={graph ? "to a throwaway fee address" : "to the fee wallet"}
+                        value={formatSats(fundingToQuote)}
+                        hint={
+                            fundingReduced ? (
+                                <span className="text-exit-ok">
+                                    down from {formatSats(pkg.totals.fundingRequiredSats)} — the
+                                    rest is already paid
+                                </span>
+                            ) : graph ? (
+                                "to a throwaway fee address"
+                            ) : (
+                                "to the fee wallet"
+                            )
+                        }
                     />
                     <Stat
                         label="Est. time"
@@ -154,6 +209,63 @@ export function ReviewScreen({
                 </CardContent>
             </Card>
 
+            {summary?.isComplete && (
+                <Warning
+                    tone="ok"
+                    icon={<CheckCircle2 className="size-4" />}
+                    title="This exit is already complete"
+                >
+                    Every transaction in this package is confirmed onchain. There is nothing left to
+                    broadcast — continue only if you want to verify that for yourself.
+                </Warning>
+            )}
+
+            {summary && summary.isInProgress && !summary.isComplete && (
+                <Warning
+                    tone="ok"
+                    icon={<History className="size-4" />}
+                    title="This exit is already part-way through"
+                >
+                    <span className="font-mono tabular-nums tracking-[-0.01em]">
+                        {summary.confirmed}
+                    </span>{" "}
+                    of{" "}
+                    <span className="font-mono tabular-nums tracking-[-0.01em]">
+                        {summary.total}
+                    </span>{" "}
+                    transactions are already confirmed onchain
+                    {summary.inFlight > 0 && (
+                        <>
+                            , and{" "}
+                            <span className="font-mono tabular-nums tracking-[-0.01em]">
+                                {summary.inFlight}
+                            </span>{" "}
+                            {summary.inFlight === 1 ? "is" : "are"} in the mempool waiting to
+                            confirm
+                        </>
+                    )}
+                    . Continuing resumes from here — it never re-does finished work, and never
+                    charges you twice for it.
+                    {summary.sweepableSats > 0 && (
+                        <>
+                            {" "}
+                            <span className="font-medium">
+                                {formatSats(summary.sweepableSats)}
+                            </span>{" "}
+                            are past their timelock and will be swept on the next run, with no
+                            further waiting.
+                        </>
+                    )}
+                    {summary.degraded && (
+                        <>
+                            {" "}
+                            The endpoint did not respond fully, so this may under-report what is
+                            done.
+                        </>
+                    )}
+                </Warning>
+            )}
+
             {expired && (
                 <Warning
                     tone="danger"
@@ -164,6 +276,17 @@ export function ReviewScreen({
                     <span className="font-mono tabular-nums tracking-[-0.01em]">validUntil</span>{" "}
                     has elapsed. The operator may already have swept some branches. Execution will
                     still try — it is harmless — but some steps may conflict.
+                    {summary && summary.confirmed > 0 && (
+                        <>
+                            {" "}
+                            This does not apply to the{" "}
+                            <span className="font-mono tabular-nums tracking-[-0.01em]">
+                                {summary.confirmed}
+                            </span>{" "}
+                            transaction{summary.confirmed === 1 ? "" : "s"} already confirmed above:
+                            once a branch is onchain it is out of the operator’s reach.
+                        </>
+                    )}
                 </Warning>
             )}
 
@@ -310,12 +433,18 @@ export function ReviewScreen({
                 disabled={active.length === 0 || !esplora.trim()}
                 onClick={() => onContinue(esplora.trim())}
             >
-                {graph ? "Set up funding" : "Begin execution"}
+                {ctaLabelFor(pkg, summary)}
                 <ArrowRight />
             </Button>
         </div>
     );
 }
+
+const TONE_STYLE = {
+    warn: "border-exit-wait/40 bg-exit-wait/10 text-exit-wait",
+    danger: "border-exit-dead/40 bg-exit-dead/10 text-exit-dead",
+    ok: "border-exit-ok/40 bg-exit-ok/10 text-exit-ok",
+} as const;
 
 function Warning({
     tone,
@@ -323,7 +452,7 @@ function Warning({
     title,
     children,
 }: {
-    tone: "warn" | "danger";
+    tone: keyof typeof TONE_STYLE;
     icon: React.ReactNode;
     title: string;
     children: React.ReactNode;
@@ -332,9 +461,7 @@ function Warning({
         <div
             className={cn(
                 "flex items-start gap-2.5 rounded-[var(--radius-exit)] border p-3 text-sm",
-                tone === "danger"
-                    ? "border-exit-dead/40 bg-exit-dead/10 text-exit-dead"
-                    : "border-exit-wait/40 bg-exit-wait/10 text-exit-wait",
+                TONE_STYLE[tone],
             )}
         >
             <span className="mt-0.5 shrink-0">{icon ?? <AlertTriangle className="size-4" />}</span>
