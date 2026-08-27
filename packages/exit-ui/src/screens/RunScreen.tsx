@@ -30,6 +30,7 @@ import {
     type TxState,
 } from "../index";
 import { FundingGate } from "./FundingGate";
+import { RecoverRemainder } from "./RecoverRemainder";
 
 type RunPhase = "probing" | "funding" | "running";
 
@@ -155,6 +156,7 @@ export function RunScreen({
             pkg={pkg}
             provider={provider}
             feeWallet={fee?.wallet}
+            fee={fee}
             sessionSaved={sessionSaved}
             progress={progress}
             onComplete={onComplete}
@@ -166,6 +168,7 @@ function ExecutionTimeline({
     pkg,
     provider,
     feeWallet,
+    fee,
     sessionSaved,
     progress,
     onComplete,
@@ -173,6 +176,9 @@ function ExecutionTimeline({
     pkg: ExitPackage;
     provider: EsploraProvider;
     feeWallet?: FeeWalletHandle["wallet"];
+    /** Graph mode only. Present so the leftover fee sats can be recovered once
+     * execution stops — see {@link RecoverRemainder}. */
+    fee?: FeeWalletHandle | null;
     sessionSaved?: boolean;
     /** Chain state sampled before execution started. Only ever a fallback for
      * rows the executor has not spoken about — a live event always wins. */
@@ -323,6 +329,13 @@ function ExecutionTimeline({
                 <div className="rounded-[var(--radius-exit)] border border-exit-dead/40 bg-exit-dead/10 p-3 text-sm text-exit-dead">
                     Executor stopped: {fatal}
                 </div>
+            )}
+
+            {/* Only once the executor has stopped, and for either reason: a
+                failed run still leaves its unspent reserve behind, and sweeping
+                mid-exit would spend the coins the remaining bumps need. */}
+            {fee && (done || fatal) && (
+                <RecoverRemainder fee={fee} network={pkg.network} feeRate={pkg.feeRate} />
             )}
 
             <ol className="flex flex-col">

@@ -60,6 +60,7 @@ export function FundingGate({
         pending: 0,
     });
     const [copied, setCopied] = useState(false);
+    const [confirmingNewKey, setConfirmingNewKey] = useState(false);
     const [unreachable, setUnreachable] = useState(false);
 
     useEffect(() => {
@@ -210,6 +211,21 @@ export function FundingGate({
                     </div>
                 )}
 
+                {confirmingNewKey && (
+                    <div className="flex items-start gap-2 rounded-[var(--radius-exit)] border border-exit-dead/40 bg-exit-dead/10 p-3 text-xs text-exit-dead">
+                        <CircleAlert className="mt-0.5 size-4 shrink-0" />
+                        <span>
+                            This address already holds{" "}
+                            <span className="font-mono tabular-nums tracking-[-0.01em]">
+                                {formatSats(balance + pending)}
+                            </span>
+                            . A new key gives you a different address and forgets this one — those
+                            sats would only be reachable through an exported bundle. Export the
+                            package first if you want them back.
+                        </span>
+                    </div>
+                )}
+
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                         <Button
@@ -223,14 +239,46 @@ export function FundingGate({
                             <Download className="size-3.5" /> Export package
                         </Button>
                         <CopyableHash value={bundle} copyOnly label="Copy" />
-                        <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => onRegenerate(resetFeeKey())}
-                            title="Discard this fee key and generate a new one"
-                        >
-                            <RefreshCw className="size-3.5" /> New key
-                        </Button>
+                        {/* Regenerating discards the key from storage. With coins
+                            already at the old address that strands them behind a
+                            key only the exported bundle still holds — so when
+                            there is a balance, make it a deliberate act. */}
+                        {confirmingNewKey ? (
+                            <>
+                                <Button
+                                    size="sm"
+                                    variant="danger"
+                                    onClick={() => {
+                                        setConfirmingNewKey(false);
+                                        onRegenerate(resetFeeKey());
+                                    }}
+                                >
+                                    Discard anyway
+                                </Button>
+                                <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() => setConfirmingNewKey(false)}
+                                >
+                                    Cancel
+                                </Button>
+                            </>
+                        ) : (
+                            <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => {
+                                    if (balance + pending > 0) {
+                                        setConfirmingNewKey(true);
+                                        return;
+                                    }
+                                    onRegenerate(resetFeeKey());
+                                }}
+                                title="Discard this fee key and generate a new one"
+                            >
+                                <RefreshCw className="size-3.5" /> New key
+                            </Button>
+                        )}
                     </div>
                     <Button disabled={!funded} onClick={onReady}>
                         {funded ? "Proceed" : "Waiting for deposit…"}
